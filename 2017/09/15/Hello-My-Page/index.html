@@ -103,7 +103,7 @@
 <meta property="og:site_name" content="群青へ">
 <meta property="og:description" content="Hello, My Page Use Github Pages and Hexo to host your own blog.  Install and ConfigGitHub Pages You need to Register GitHub and Install Git New repository, repository name is yourname.github.io Settin">
 <meta property="og:locale" content="zh-Hans">
-<meta property="og:updated_time" content="2021-03-20T12:26:42.990Z">
+<meta property="og:updated_time" content="2021-03-20T18:10:10.906Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="Hello, My Page">
 <meta name="twitter:description" content="Hello, My Page Use Github Pages and Hexo to host your own blog.  Install and ConfigGitHub Pages You need to Register GitHub and Install Git New repository, repository name is yourname.github.io Settin">
@@ -401,7 +401,21 @@
 <h3 id="Themes"><a href="#Themes" class="headerlink" title="Themes"></a>Themes</h3><ol>
 <li>You can choose your favorite Themes for your blog in <a href="https://hexo.io/themes/" target="_blank" rel="external">Themes</a> and my recommendation is <a href="https://theme-next.js.org/" target="_blank" rel="external">NexT</a>.</li>
 </ol>
-<h3 id="Plugins"><a href="#Plugins" class="headerlink" title="Plugins"></a>Plugins</h3><h2 id="Create-and-Deploy"><a href="#Create-and-Deploy" class="headerlink" title="Create and Deploy"></a>Create and Deploy</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><ol>
+<h3 id="Busuanzi"><a href="#Busuanzi" class="headerlink" title="Busuanzi"></a>Busuanzi</h3><ol>
+<li>You can use <code>busuanzi</code> to count viewers </li>
+<li>Open <code>themes/next/layout/_config.yml</code> and modify the settings <code>enable:true</code> of <code>busuanzi_count</code> </li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">busuanzi_count:</div><div class="line">  enable:true</div></pre></td></tr></table></figure>
+<ol>
+<li>Open <code>themes/next/layout/_partials/footer.swig</code></li>
+<li>Add the following code at the beginning.</li>
+</ol>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">&lt;script <span class="keyword">async</span> src=<span class="string">"//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"</span>&gt;&lt;/script&gt;</div></pre></td></tr></table></figure>
+<ol>
+<li>Add the following code at the end.</li>
+</ol>
+<figure class="highlight js"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">&#123;% <span class="keyword">if</span> theme.busuanzi.count &amp;&amp; theme.busuanzi.count.enable %&#125;</div><div class="line">  &lt;span id=<span class="string">"busuanzi_container_site_pv"</span>&gt;总访问量&lt;span id=<span class="string">"busuanzi_value_site_pv"</span>&gt;&lt;/span&gt;次&lt;<span class="regexp">/span&gt;</span></div><div class="line"><span class="regexp">  &lt;span class="post-meta-divider"&gt;|&lt;/</span>span&gt;</div><div class="line">  &lt;span id=<span class="string">"busuanzi_container_site_uv"</span>&gt;总访客数&lt;span id=<span class="string">"busuanzi_value_site_uv"</span>&gt;&lt;/span&gt;人&lt;<span class="regexp">/span&gt;</span></div><div class="line"><span class="regexp">&#123;% endif %&#125;</span></div></pre></td></tr></table></figure>
+<h2 id="Create-and-Deploy"><a href="#Create-and-Deploy" class="headerlink" title="Create and Deploy"></a>Create and Deploy</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><ol>
 <li><p>Input</p>
 <figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ hexo new <span class="string">"My New Post"</span></div></pre></td></tr></table></figure>
 </li>
@@ -643,7 +657,7 @@
             
 
             
-              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Hello-My-Page"><span class="nav-number">1.</span> <span class="nav-text">Hello, My Page</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Install-and-Config"><span class="nav-number">1.1.</span> <span class="nav-text">Install and Config</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#GitHub-Pages"><span class="nav-number">1.1.1.</span> <span class="nav-text">GitHub Pages</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Hexo"><span class="nav-number">1.1.2.</span> <span class="nav-text">Hexo</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Configuration"><span class="nav-number">1.1.3.</span> <span class="nav-text">Configuration</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Themes"><span class="nav-number">1.1.4.</span> <span class="nav-text">Themes</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Plugins"><span class="nav-number">1.1.5.</span> <span class="nav-text">Plugins</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Create-and-Deploy"><span class="nav-number">1.2.</span> <span class="nav-text">Create and Deploy</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Create-a-new-post"><span class="nav-number">1.2.1.</span> <span class="nav-text">Create a new post</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Create-a-new-page-such-as-about-tags-categories"><span class="nav-number">1.2.2.</span> <span class="nav-text">Create a new page(such as about/tags/categories)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Run-server"><span class="nav-number">1.2.3.</span> <span class="nav-text">Run server</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Generate-and-deploy"><span class="nav-number">1.2.4.</span> <span class="nav-text">Generate and deploy</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Clean-the-cache"><span class="nav-number">1.2.5.</span> <span class="nav-text">Clean the cache</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#References"><span class="nav-number">1.3.</span> <span class="nav-text">References</span></a></li></ol></li></ol></div>
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-1"><a class="nav-link" href="#Hello-My-Page"><span class="nav-number">1.</span> <span class="nav-text">Hello, My Page</span></a><ol class="nav-child"><li class="nav-item nav-level-2"><a class="nav-link" href="#Install-and-Config"><span class="nav-number">1.1.</span> <span class="nav-text">Install and Config</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#GitHub-Pages"><span class="nav-number">1.1.1.</span> <span class="nav-text">GitHub Pages</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Hexo"><span class="nav-number">1.1.2.</span> <span class="nav-text">Hexo</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Configuration"><span class="nav-number">1.1.3.</span> <span class="nav-text">Configuration</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Themes"><span class="nav-number">1.1.4.</span> <span class="nav-text">Themes</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Busuanzi"><span class="nav-number">1.1.5.</span> <span class="nav-text">Busuanzi</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Create-and-Deploy"><span class="nav-number">1.2.</span> <span class="nav-text">Create and Deploy</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Create-a-new-post"><span class="nav-number">1.2.1.</span> <span class="nav-text">Create a new post</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Create-a-new-page-such-as-about-tags-categories"><span class="nav-number">1.2.2.</span> <span class="nav-text">Create a new page(such as about/tags/categories)</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Run-server"><span class="nav-number">1.2.3.</span> <span class="nav-text">Run server</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Generate-and-deploy"><span class="nav-number">1.2.4.</span> <span class="nav-text">Generate and deploy</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Clean-the-cache"><span class="nav-number">1.2.5.</span> <span class="nav-text">Clean the cache</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#References"><span class="nav-number">1.3.</span> <span class="nav-text">References</span></a></li></ol></li></ol></div>
             
 
           </div>
@@ -663,7 +677,7 @@
 
     <footer id="footer" class="footer">
       <div class="footer-inner">
-        <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+        
 
 <div class="copyright" >
   
@@ -683,8 +697,6 @@
   <span class="post-meta-divider">|</span>
 
   <div class="theme-info">主题 &mdash; <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">NexT.Pisces</a> v5.1.2</div>
-
-
 
         
 <div class="busuanzi-count">
