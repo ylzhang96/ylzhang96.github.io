@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+
+
+
+  
+
+
+<html class="theme-next pisces use-motion" lang="zh-Hans,default">
+<head>
+  <meta charset="UTF-8"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1"/>
+<meta name="theme-color" content="#222">
+
+
+
+
+
+
+
+
+
+<meta http-equiv="Cache-Control" content="no-transform" />
+<meta http-equiv="Cache-Control" content="no-siteapp" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  <link href="/lib/fancybox/source/jquery.fancybox.css?v=2.1.5" rel="stylesheet" type="text/css" />
+
+
+
+
+  
+  
+  
+  
+
+  
+    
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+    
+    
+    <link href="//fonts.googleapis.com/css?family=Lato:300,300italic,400,400italic,700,700italic&subset=latin,latin-ext" rel="stylesheet" type="text/css">
+  
+
+
+
+
+
+
+<link href="/lib/font-awesome/css/font-awesome.min.css?v=4.6.2" rel="stylesheet" type="text/css" />
+
+<link href="/css/main.css?v=5.1.2" rel="stylesheet" type="text/css" />
+
+
+  <meta name="keywords" content="Computer Science,Deep Learning,Graph Convolutional Network,doing," />
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" type="image/x-icon" href="/images/favicon.ico?v=5.1.2" />
+
+
+
+
+
+
+<meta name="description" content="Graph Convolutional NetworkIntroductionWhy Graph图是科学研究中一种常用的数据结构，可用于描述物体（结点）与它们之间的关系（边），例如社交网络、知识图谱等。然而，区别于图像这类Euclidean Structure（像素点是排列整齐的矩阵），图是一种Non-Euclidean Structure。 Why Convolution传统卷积，本质上是一种加">
+<meta name="keywords" content="Computer Science,Deep Learning,Graph Convolutional Network,doing">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Graph Convolutional Network">
+<meta property="og:url" content="http://yoursite.com/2019/08/22/Graph-Convolutional-Network/index.html">
+<meta property="og:site_name" content="群青へ">
+<meta property="og:description" content="Graph Convolutional NetworkIntroductionWhy Graph图是科学研究中一种常用的数据结构，可用于描述物体（结点）与它们之间的关系（边），例如社交网络、知识图谱等。然而，区别于图像这类Euclidean Structure（像素点是排列整齐的矩阵），图是一种Non-Euclidean Structure。 Why Convolution传统卷积，本质上是一种加">
+<meta property="og:locale" content="zh-Hans">
+<meta property="og:updated_time" content="2021-03-20T16:00:00.000Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Graph Convolutional Network">
+<meta name="twitter:description" content="Graph Convolutional NetworkIntroductionWhy Graph图是科学研究中一种常用的数据结构，可用于描述物体（结点）与它们之间的关系（边），例如社交网络、知识图谱等。然而，区别于图像这类Euclidean Structure（像素点是排列整齐的矩阵），图是一种Non-Euclidean Structure。 Why Convolution传统卷积，本质上是一种加">
+
+
+
+<script type="text/javascript" id="hexo.configurations">
+  var NexT = window.NexT || {};
+  var CONFIG = {
+    root: '/',
+    scheme: 'Pisces',
+    version: '5.1.2',
+    sidebar: {"position":"left","display":"hide","offset":12,"offset_float":12,"b2t":false,"scrollpercent":false,"onmobile":false},
+    fancybox: true,
+    tabs: true,
+    motion: {"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn"}},
+    duoshuo: {
+      userId: '0',
+      author: '博主'
+    },
+    algolia: {
+      applicationID: '',
+      apiKey: '',
+      indexName: '',
+      hits: {"per_page":10},
+      labels: {"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}
+    }
+  };
+</script>
+
+
+
+  <link rel="canonical" href="http://yoursite.com/2019/08/22/Graph-Convolutional-Network/"/>
+
+
+
+
+
+  <title>Graph Convolutional Network | 群青へ</title>
+  
+
+
+
+
+
+  <script type="text/javascript">
+    var _hmt = _hmt || [];
+    (function() {
+      var hm = document.createElement("script");
+      hm.src = "https://hm.baidu.com/hm.js?5afbe73a033f4e1859eb8878dd7f3840";
+      var s = document.getElementsByTagName("script")[0];
+      s.parentNode.insertBefore(hm, s);
+    })();
+  </script>
+
+
+
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" lang="zh-Hans">
+
+  
+  
+    
+  
+
+  <div class="container sidebar-position-left page-post-detail">
+    <div class="headband"></div>
+
+    <header id="header" class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-wrapper">
+  <div class="site-meta ">
+    
+
+    <div class="custom-logo-site-title">
+      <a href="/"  class="brand" rel="start">
+        <span class="logo-line-before"><i></i></span>
+        <span class="site-title">群青へ</span>
+        <span class="logo-line-after"><i></i></span>
+      </a>
+    </div>
+      
+        <p class="site-subtitle">全てを賭けて描く。<br>自分にしか出せない色で。<br>朝も夜も、走り続け、<br>見つけ出した青い光。</p>
+      
+  </div>
+
+  <div class="site-nav-toggle">
+    <button>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+      <span class="btn-bar"></span>
+    </button>
+  </div>
+</div>
+
+<nav class="site-nav">
+  
+
+  
+    <ul id="menu" class="menu">
+      
+        
+        <li class="menu-item menu-item-home">
+          <a href="/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
+            
+            首页
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-archives">
+          <a href="/archives/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
+            
+            归档
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-categories">
+          <a href="/categories/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
+            
+            分类
+          </a>
+        </li>
+      
+        
+        <li class="menu-item menu-item-about">
+          <a href="/about/" rel="section">
+            
+              <i class="menu-item-icon fa fa-fw fa-user"></i> <br />
+            
+            关于
+          </a>
+        </li>
+      
+
+      
+    </ul>
+  
+
+  
+</nav>
+
+
+
+ </div>
+    </header>
+
+    <main id="main" class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          <div id="content" class="content">
+            
+
+  <div id="posts" class="posts-expand">
+    
+
+  
+
+  
+  
+  
+
+  <article class="post post-type-normal" itemscope itemtype="http://schema.org/Article">
+  
+  
+  
+  <div class="post-block">
+    <link itemprop="mainEntityOfPage" href="http://yoursite.com/2019/08/22/Graph-Convolutional-Network/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="name" content="Yanli Zhang">
+      <meta itemprop="description" content="">
+      <meta itemprop="image" content="/images/icon1.jpg">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="群青へ">
+    </span>
+
+    
+      <header class="post-header">
+
+        
+        
+          <h1 class="post-title" itemprop="name headline">Graph Convolutional Network</h1>
+        
+
+        <div class="post-meta">
+          <span class="post-time">
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">发表于</span>
+              
+              <time title="创建于" itemprop="dateCreated datePublished" datetime="2019-08-22T01:21:07+08:00">
+                2019-08-22
+              </time>
+            
+
+            
+
+            
+          </span>
+
+          
+            <span class="post-category" >
+            
+              <span class="post-meta-divider">|</span>
+            
+              <span class="post-meta-item-icon">
+                <i class="fa fa-folder-o"></i>
+              </span>
+              
+                <span class="post-meta-item-text">分类于</span>
+              
+              
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/Computer-Science/" itemprop="url" rel="index">
+                    <span itemprop="name">Computer Science</span>
+                  </a>
+                </span>
+
+                
+                
+              
+            </span>
+          
+
+          
+            
+          
+
+          
+          
+
+          
+            <span class="post-meta-divider">|</span>
+            <span class="page-pv"><i class="fa fa-file-o"></i>
+            <span class="busuanzi-value" id="busuanzi_value_page_pv" ></span>
+            </span>
+          
+
+          
+
+          
+
+        </div>
+      </header>
+    
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+      
+
+      
+        <h2 id="Graph-Convolutional-Network"><a href="#Graph-Convolutional-Network" class="headerlink" title="Graph Convolutional Network"></a>Graph Convolutional Network</h2><h2 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h2><h3 id="Why-Graph"><a href="#Why-Graph" class="headerlink" title="Why Graph"></a>Why Graph</h3><p>图是科学研究中一种常用的数据结构，可用于描述物体（<strong>结点</strong>）与它们之间的关系（<strong>边</strong>），例如社交网络、知识图谱等。<br>然而，区别于图像这类Euclidean Structure（像素点是排列整齐的矩阵），图是一种<strong>Non-Euclidean Structure</strong>。</p>
+<h3 id="Why-Convolution"><a href="#Why-Convolution" class="headerlink" title="Why Convolution"></a>Why Convolution</h3><p>传统卷积，本质上是一种<strong>加权求和</strong>。CNN中，卷积核的参数通过优化求出，能够提取多尺度的局部空间特征（multi-scale localized spatial features），主要应用于欧式结构的数据上（可保证卷积的平移不变性）。<br>比起FNN，CNN的优点主要有以下三点：</p>
+<ul>
+<li>局部连接（local connection）=&gt; 图本身具有局部连接性  </li>
+<li>共享权重（shared weights）=&gt; 共享参数能够减少传统谱图方法的计算复杂性</li>
+<li>多层（multi-layer）=&gt; 适合提取多层次的特征</li>
+</ul>
+<p>然而图是非欧式结构的，无法保证拓扑图中每个顶点的相邻顶点数目相同，便无法使用相同尺寸的传统卷积核进行卷积运算，GCN的理论主要是为了引入可以优化的卷积参数。（<strong>相对传统GNN的好处呢</strong>）</p>
+<a id="more"></a>
+<h3 id="Comparison-with-Graph-Embedding"><a href="#Comparison-with-Graph-Embedding" class="headerlink" title="Comparison with Graph Embedding"></a>Comparison with Graph Embedding</h3><p>Graph Embedding旨在将图上的每个结点映射为低维向量，例如DeepWalk，node2vec等方法，然而它存在以下问题：</p>
+<ul>
+<li>每个结点都要映射成一个向量，向量之间没有共享参数，计算复杂度大<ul>
+<li>难以处理动态图，新增一个结点就要重新训练整个图（<strong>但是GCN也需要重新训练，GraphSAGE不一定需要</strong>）</li>
+<li><strong>？无监督和半监督</strong>，传统的Graph Embedding只关注图的局部空间结构，并不关注具体结点的特征（不针对具体的task）；而GCN更多是关注于一个具体的task，训练时可引入部分结点的label信息，包括结点本身的特性。</li>
+</ul>
+</li>
+</ul>
+<h3 id="Generalize-Convolution"><a href="#Generalize-Convolution" class="headerlink" title="Generalize Convolution"></a>Generalize Convolution</h3><p>如何在图上推广卷积，总体来说可以分为两类：</p>
+<ul>
+<li><p>Spatial Domain（Non-Spectral Domain）</p>
+<ul>
+<li>找出neighbor（如何定义每个顶点的neighbor，如何处理不同数目的neighbor）</li>
+<li>聚合neighbor（如何聚合）</li>
+</ul>
+</li>
+<li><p>Spectral Domain</p>
+<ul>
+<li>利用图谱理论（Spectral Graph Theory），借助图的拉普拉斯矩阵的特征值和特征向量推广图上的傅里叶变换，从而定义图上的卷积（联系卷积定理）</li>
+</ul>
+</li>
+</ul>
+<p>几乎所有的Spectral Domain方法都需要使用拉普拉斯矩阵，这就使得它必须针对一个具体的图训练（transductive learning），改变图就需要重新训练，而Spatial Domain方法不一定需要（<strong>inductive learning，在图改变不大时</strong>）。<br>Spatial Domain方法更为直观，直接定义图中空间相邻的顶点，但是主要需要考虑如何对不同数目的邻居进行聚合操作，以及怎么保持CNN的局部不变性。</p>
+<h2 id="GCN"><a href="#GCN" class="headerlink" title="GCN"></a>GCN</h2><h3 id="傅里叶级数-Fourier-Series"><a href="#傅里叶级数-Fourier-Series" class="headerlink" title="傅里叶级数(Fourier Series)"></a>傅里叶级数(Fourier Series)</h3><p>光的色散现象：光是一种波，光的颜色由振幅和频率所决定。经过一个三棱镜的折射后，白色的光波被分解为七色光波（实际是无数种颜色的光波）。<br>任何周期函数，都可以使用傅里叶笔级数展开法，将它们分解为有限或无限个不同频率不同振幅的正弦函数（余弦函数）的叠加。</p>
+<h4 id="三角函数系"><a href="#三角函数系" class="headerlink" title="三角函数系"></a>三角函数系</h4><p><strong>三角函数系${1, \sin{x}, \cos{x}, \sin{2x}, \cos{2x}, …, \sin{nx}, \cos{nx}, …}$在$[-\pi, \pi]$上正交，即其中任意两个不同的函数之积在$[-\pi, \pi]$上的积分等于0. 但在三角函数系中两个相同的函数的乘积在$[-\pi, \pi]$上的积分不等于0.</strong><br>函数$f(x)$和$g(x)$在[a, b]区间正交：<br>$$\int_a^b{f(x)\cdot{g(x)}\mathrm{d}x \ = \ 0}$$<br>可以将函数看作是一个无穷维的向量，例如$[\sin{1}, \sin{2}, \sin{3}, …]$和$[\cos{1}, \cos{2}, \cos{3}, …]$，那么两个函数正交，即需要满足$\sin{1}\cdot\cos{1}+\sin{2}\cdot\cos{2}+\sin{3}\cdot\cos{3}+…=0$，两个向量对应维度乘积再求和，对应为两个函数乘积再积分。</p>
+<blockquote>
+<p><strong>证明：</strong><br>显然<br>$$<br>\begin{aligned}<br>1) \ \int<em>{-\pi}^{\pi}1\cdot \cos{nx}\, \mathrm{d}x \ = \ \int</em>{<br>-\pi}^{\pi}1\cdot \sin{nx}\, \mathrm{d}x \ = \ 0 \qquad (n=1, 2, …) \<br>\end{aligned}<br>$$<br>由积化和差可得<br>$$<br>\begin{aligned}<br>2) \ &amp;\int<em>{-\pi}^{\pi}\cos{nx}\cdot \cos{mx}\, \mathrm{d}x \ = \ \int</em>{-\pi}^{\pi}\frac{\cos{(n+m)x}+\cos{(n-m)x}}{2}\, \mathrm{d} x \<br>= \ &amp;\frac{1}{2}\, [\frac{\sin{(n+m)x}}{n+m}+\frac{\sin{(n-m)x}}{n-m}]<em>{-\pi}^{\pi} \ = \ 0 \qquad (n\in{N^<em>}, m\in{N^</em>}, n\neq{m}) \<br>\end{aligned}<br>$$<br>同理可证<br>$$<br>\begin{aligned}<br>3) \ &amp;\int</em>{-\pi}^{\pi}\sin{nx}\cdot \sin{mx}\, \mathrm{d}x \ = \ 0 \qquad (n\in{N^<em>}, m\in{N^</em>}, n\neq{m}) \<br>4) \ &amp;\int<em>{-\pi}^{\pi}\cos{nx}\cdot \sin{mx}\, \mathrm{d}x \ = \ 0  \qquad (n\in{N^<em>}, m\in{N^</em>}) \<br>\end{aligned}<br>$$<br>又<br>$$<br>\begin{aligned}<br>5) \ &amp;\int</em>{-\pi}^{\pi}1\cdot 1 \, \mathrm{d}x \ = \ 2\pi \<br>6) \ &amp;\int<em>{-\pi}^{\pi}\cos^2{nx} \, \mathrm{d}x \ = \ \pi \qquad (n\in{N^*}) \<br>7) \ &amp;\int</em>{-\pi}^{\pi}\sin^2{nx} \, \mathrm{d}x \ = \ \pi \qquad (n\in{N^*}) \<br>\end{aligned}<br>$$<br>得证</p>
+</blockquote>
+<h4 id="T-2-pi-的函数展开为傅里叶级数-Fourier-Series"><a href="#T-2-pi-的函数展开为傅里叶级数-Fourier-Series" class="headerlink" title="$T=2\pi$的函数展开为傅里叶级数(Fourier Series)"></a>$T=2\pi$的函数展开为傅里叶级数(Fourier Series)</h4><p>$$<br>f(x) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{nx}+b_n\sin{nx}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\mathrm{d}x \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\cos{nx}\mathrm{d}x \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\sin{nx}\mathrm{d}x<br>\end{aligned}<br>\right.<br>$$</p>
+<ul>
+<li><p>确定$a_0$：对$f(x)$两边求积分</p>
+<blockquote>
+<p>$$<br>\begin{aligned}<br>\int<em>{-\pi}^{\pi}f(x)\mathrm{d}x \ &amp;= \int</em>{-\pi}^{\pi}\frac{a<em>0}{2}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}a<em>n\cos{nx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}b_n\sin{nx}\mathrm{d}x \<br>&amp;= \frac{a<em>0}{2}\int</em>{-\pi}^{\pi}\mathrm{d}x+\sum_{n=1}^{\infty}a<em>n\int</em>{-\pi}^{\pi}1\cdot\cos{nx}\mathrm{d}x+\sum_{n=1}^{\infty}b<em>n\int</em>{-\pi}^{\pi}1\cdot\sin{nx}\mathrm{d}x \qquad &amp;{\text{（对x积分与$a_n$无关）}} \<br>&amp;= \frac{a<em>0}{2}\cdot{2\pi}+\sum</em>{n=1}^{\infty}a<em>n\cdot{0}+\sum</em>{n=1}^{\infty}b_n\cdot{0} \qquad &amp;{\text{（三角函数的正交性）}} \<br>&amp;= \pi\cdot{a_0} \<br>\Rightarrow a<em>0 \ &amp;= \ \frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\mathrm{d}x \<br>\end{aligned}<br>$$</p>
+</blockquote>
+</li>
+<li><p>确定$a_n$：两边同乘$\cos{mx}$后积分</p>
+<blockquote>
+<p>$$<br>\begin{aligned}<br>\int<em>{-\pi}^{\pi}f(x)\cos{mx}\mathrm{d}x \ &amp;= \int</em>{-\pi}^{\pi}\frac{a<em>0}{2}\cos{mx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}b_n\sin{nx}\cos{mx}\mathrm{d}x \<br>&amp;= \frac{a<em>0}{2}\int</em>{-\pi}^{\pi}\cos{mx}\cdot{1}\mathrm{d}x+\int<em>{-\pi}^{\pi}\sum</em>{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x+\sum</em>{n=1}^{\infty}b<em>n\int</em>{-\pi}^{\pi}\sin{nx}\cos{mx}\mathrm{d}x \qquad \<br>&amp;= \int<em>{-\pi}^{\pi}\sum</em>{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x \qquad &amp;{\text{（三角函数的正交性）}} \<br>&amp;= \int</em>{-\pi}^{\pi}a_n\cos{nx}\cos{nx}\mathrm{d}x \qquad &amp;{\text{（$n=m$时才保留）}} \<br>&amp;= \pi\cdot{a_n} \<br>\Rightarrow a<em>n \ &amp;= \ \frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\cos{nx}\mathrm{d}x \<br>\end{aligned}<br>$$</p>
+</blockquote>
+</li>
+<li><p>确定$b_n$：如上两边同乘$\sin{mx}$后积分</p>
+</li>
+</ul>
+<h4 id="T-2L-的函数展开为傅里叶级数-Fourier-Series"><a href="#T-2L-的函数展开为傅里叶级数-Fourier-Series" class="headerlink" title="$T=2L$的函数展开为傅里叶级数(Fourier Series)"></a>$T=2L$的函数展开为傅里叶级数(Fourier Series)</h4><p>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>\qquad<br>\ ( \omega \ = \ \frac{\pi}{L} \ = \ \frac{2\pi}{T})<br>$$</p>
+<blockquote>
+<p><strong>证明：</strong><br>换元，令$x=\frac{\pi}{L}t$，则$t=\frac{L}{\pi}x$<br>因为f(t)是以$2L$为周期的周期函数，令$f(t)=f(\frac{L}{\pi}x)=g(x)$<br>则$g(x+2\pi)=f(\frac{L}{\pi}x+\frac{L}{\pi}\cdot2\pi)=f(\frac{L}{\pi}x+2L)=f(\frac{L}{\pi}x)=g(x)$是以$2\pi$为周期的周期函数<br>所以<br>$$<br>g(x) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{nx}+b_n\sin{nx}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\mathrm{d}x \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\cos{nx}\mathrm{d}x \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\sin{nx}\mathrm{d}x<br>\end{aligned}<br>\right.<br>$$<br>代入$x=\frac{\pi}{L}t$，所以<br>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{\frac{n\pi}{L}t}+b_n\sin{\frac{n\pi}{L}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\cos{\frac{n\pi}{L}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\sin{\frac{n\pi}{L}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>$$<br>工程中，由于t为正数，使用$\omega=\frac{\pi}{L}=\frac{2\pi}{T}$；由于是周期函数，可将积分区间从$[-L, L]$变为$[0, 2L]$即$[0, T]$，证毕。</p>
+</blockquote>
+<h4 id="欧拉公式"><a href="#欧拉公式" class="headerlink" title="欧拉公式"></a>欧拉公式</h4><h4 id="傅里叶级数的复数形式"><a href="#傅里叶级数的复数形式" class="headerlink" title="傅里叶级数的复数形式"></a>傅里叶级数的复数形式</h4><p>$$f(t) \ = \ \sum_{n=-\infty}^{\infty}{c_n}{e^{in{\omega}t}} \qquad c_n \ = \frac{1}{T}\int_0^T{f(t)e^{-in{\omega}t}\mathrm{d}t} \qquad \omega \ = \ \frac{2\pi}{T}$$</p>
+<blockquote>
+<p><strong>证明：</strong><br>由欧拉公式<br>$$e^{i\theta}=cos{\theta}+isin{\theta}$$<br>则<br>$$<br>\left{<br>\begin{aligned}<br>&amp;\cos{\theta} \ = \ \frac{1}{2}(e^{i\theta}+e^{-i\theta}) \<br>&amp;\sin{\theta} \ = \ -\frac{1}{2}i(e^{i\theta}-e^{-i\theta})<br>\end{aligned}<br>\right.<br>$$<br>代入<br>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>$$<br>$$f(t)\ = \ \frac{a<em>0}{2} + \sum</em>{n=1}^{\infty}{[\frac{1}{2}{a_n}(e^{in{\omega}t}+e^{-in{\omega}t})-\frac{1}{2}i{b_n}(e^{in{\omega}t}-e^{-in{\omega}t})]}$$</p>
+</blockquote>
+<h4 id="理解Fourier-Series"><a href="#理解Fourier-Series" class="headerlink" title="理解Fourier Series"></a>理解Fourier Series</h4><p>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>\qquad<br>\ ( \omega \ = \ \frac{\pi}{L} \ = \ \frac{2\pi}{T})<br>$$</p>
+<p>其中$n\omega=\frac{2{\pi}n}{T}$是频率。</p>
+<ul>
+<li><p>理解一：将一个周期函数从<strong>时域</strong>（时间与振幅的关系）转化为<strong>频域</strong>（频率与振幅的关系）<br>经过分解后的函数可以用另一幅图来表示，横坐标为各个分量的频率（不断递增的整数），纵坐标为对应振幅。即图中，侧面观看到的$S(f)$。也就是说，频域图中每个点(频率，振幅) 对应的就是一个正弦函数中的频率和振幅参数。所有正弦函数的频率和振幅参数点组成整幅频域图。</p>
+</li>
+<li><p>理解二：将周期函数转化为一组<strong>正交基</strong>下的<strong>坐标表示</strong><br>描述向量的时候，都有对应的基，即在某组基下的坐标表示构成了向量。默认是单位基时，则不显式提到。<br>某个周期函数是在正弦函数系作为正交基下的傅里叶级数向量。给定周期函数T，频率图中的横坐标频率值所代表的三角函数就是傅里叶级数的正交基，即$(1, \cos{\frac{(2{\pi}n)}{T}}, \sin{\frac{(2{\pi}{n})}{T}} )$，而其系数$(\frac{a_0}{2}, a_n, b_n)$构成的向量就是傅里叶级数。</p>
+</li>
+</ul>
+<h3 id="傅里叶变换-Fourier-Transformation"><a href="#傅里叶变换-Fourier-Transformation" class="headerlink" title="傅里叶变换(Fourier Transformation)"></a>傅里叶变换(Fourier Transformation)</h3><h4 id="理解傅里叶变换"><a href="#理解傅里叶变换" class="headerlink" title="理解傅里叶变换"></a>理解傅里叶变换</h4><p>傅里叶变换可以从多种角度进行表述。<br>从<strong>数学</strong>角度，傅立叶变换就是将周期函数转化为一组<strong>正交基</strong>下的<strong>坐标表示</strong>，这个坐标表示就是傅立叶变换的结果。换句话说，周期函数是这些<strong>正交基的线性组合</strong>（向量的叠加），线性组合系数构成的向量就是傅立叶变换的结果。<br>从<strong>信号处理</strong>领域角度，傅里叶变换将一个周期函数从<strong>时域</strong>（时间与振幅的关系）转化为<strong>频域</strong>（频率与振幅的关系）。做个类比，正交基选择的是正弦函数，每个正弦函数有个频率参数值，而每个正弦函数的振幅参数就是该基下对应的坐标值。所有正弦函数的振幅构成的向量就是傅立叶变换的结果。</p>
+<p>函数理解为向量（无穷维的）<br>如果一个空间有一组基两两正交，那么它就叫做一组正交基。<br>傅里叶级数是用三角函数作为基函数的。</p>
+<p>傅里叶级数实际上就是把这个空间中的一个向量（函数）通过基的线性组合的方式写出来。<br>（唯一性=&gt;正交性，线性无关（不平行）=&gt;正交（垂直），基=&gt;正交基）<br>正交 和别人是0 要求的系数只需要$f(t)$和自己做内积（复数的话是共轭做内积）</p>
+<p>正交空间（酉空间）的坐标变换</p>
+<p>傅里叶变换只是推广成了积分<br>$$f(t)\ =\ \frac{1}{2\pi}\int<em>{-\infty}^{\infty}{\int^{\infty}</em>{\infty}f(t)e^{-i{\omega}t}\mathrm{d}te^{i{\omega}t}\mathrm{d}{\omega}}$$</p>
+<p>$$F(\omega) \ = \ \int^{\infty}_{\infty}f(t)e^{-i{\omega}t}\mathrm{d}t$$<br>$\omega$取遍整个频域的横坐标，但仍然是基，在这个基上的取值是$F(\omega)$</p>
+<p>e^(jwt) 在复平面中，可以作为一个“基”，因为它已经包含了实轴（实数单位“1”）上和虚轴（虚数单位“j”）上两个正交的“基”。</p>
+<p>我们说正弦波是正交的，意思是e^(jwt) e^(-jw’t)积分后是delta函数，w’=w时为无穷大，否则为0。</p>
+<p><a href="https://www.zhihu.com/question/19714540" target="_blank" rel="external">https://www.zhihu.com/question/19714540</a></p>
+<p>三角函数的定义就是通过指数函数的<br><a href="https://www.zhihu.com/question/26135850/answer/32260694" target="_blank" rel="external">https://www.zhihu.com/question/26135850/answer/32260694</a></p>
+<h3 id="Laplacian-Matrix"><a href="#Laplacian-Matrix" class="headerlink" title="Laplacian Matrix"></a>Laplacian Matrix</h3><h4 id="拉普拉斯算子-Laplacian-Operator"><a href="#拉普拉斯算子-Laplacian-Operator" class="headerlink" title="拉普拉斯算子(Laplacian Operator)"></a>拉普拉斯算子(Laplacian Operator)</h4><h4 id="拉普拉斯矩阵-Laplacian-Matrix"><a href="#拉普拉斯矩阵-Laplacian-Matrix" class="headerlink" title="拉普拉斯矩阵(Laplacian Matrix)"></a>拉普拉斯矩阵(Laplacian Matrix)</h4><h4 id="拉普拉斯矩阵的特征分解"><a href="#拉普拉斯矩阵的特征分解" class="headerlink" title="拉普拉斯矩阵的特征分解"></a>拉普拉斯矩阵的特征分解</h4><p>拉普拉斯矩阵是半正定对称矩阵，因此其特征值均非负，且特征向量互相正交，构成正交矩阵U</p>
+<p>e^-iwt是拉普拉斯算子的特征函数，频率\omega和特征值有关  ？因还是果  是因为傅里叶变换eiwt所以图上推广拉普拉斯算子 拉普拉斯矩阵的特征向量  还是因为拉普拉斯算子所以eiwt，【看看？拉普拉斯变换】</p>
+<p>拉普拉斯矩阵的特征向量</p>
+<p>现在有一个f，f与图的顶点一一对应，</p>
+<h3 id="Graph-Fourier-Transformation"><a href="#Graph-Fourier-Transformation" class="headerlink" title="Graph Fourier Transformation"></a>Graph Fourier Transformation</h3><h3 id="Graph-Convolution"><a href="#Graph-Convolution" class="headerlink" title="Graph Convolution"></a>Graph Convolution</h3><h3 id="GCN-1"><a href="#GCN-1" class="headerlink" title="GCN"></a>GCN</h3><h2 id="GraphSAGE"><a href="#GraphSAGE" class="headerlink" title="GraphSAGE"></a>GraphSAGE</h2><h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="https://www.zhihu.com/question/54504471/answer/332657604" target="_blank" rel="external">如何理解 Graph Convolutional Network（GCN）？ - superbrother的回答 - 知乎</a></li>
+<li><a href="https://www.zhihu.com/question/54504471/answer/630639025" target="_blank" rel="external">如何理解 Graph Convolutional Network（GCN）？ - Johnny Richards的回答 - 知乎</a></li>
+<li><a href="http://xtf615.com/2019/02/24/gcn/" target="_blank" rel="external">Graph Convolutional Networks @xuetf</a></li>
+<li><a href="">Graph Neural Network: A Review of Methods and Application</a></li>
+<li><a href="https://www.bilibili.com/video/av63251517" target="_blank" rel="external">【谜之舒适】12分钟的傅立叶级数动画 UP主：3Blue1Brown</a></li>
+</ul>
+
+      
+    </div>
+    
+    
+    
+
+    
+
+    
+
+    
+
+    <footer class="post-footer">
+      
+        <div class="post-tags">
+          
+            <a href="/tags/Computer-Science/" rel="tag"># Computer Science</a>
+          
+            <a href="/tags/Deep-Learning/" rel="tag"># Deep Learning</a>
+          
+            <a href="/tags/Graph-Convolutional-Network/" rel="tag"># Graph Convolutional Network</a>
+          
+            <a href="/tags/doing/" rel="tag"># doing</a>
+          
+        </div>
+      
+
+      
+      
+      
+
+      
+        <div class="post-nav">
+          <div class="post-nav-next post-nav-item">
+            
+              <a href="/2017/09/18/Markdown/" rel="next" title="Markdown">
+                <i class="fa fa-chevron-left"></i> Markdown
+              </a>
+            
+          </div>
+
+          <span class="post-nav-divider"></span>
+
+          <div class="post-nav-prev post-nav-item">
+            
+              <a href="/2020/07/12/中级日语会话-学习笔记01-04/" rel="prev" title="中级日语会话 学习笔记 01-04">
+                中级日语会话 学习笔记 01-04 <i class="fa fa-chevron-right"></i>
+              </a>
+            
+          </div>
+        </div>
+      
+
+      
+      
+    </footer>
+  </div>
+  
+  
+  
+  </article>
+
+
+
+    <div class="post-spread">
+      
+    </div>
+  </div>
+
+
+          </div>
+          
+
+
+          
+  <div class="comments" id="comments">
+    
+  </div>
+
+
+        </div>
+        
+          
+  
+  <div class="sidebar-toggle">
+    <div class="sidebar-toggle-line-wrap">
+      <span class="sidebar-toggle-line sidebar-toggle-line-first"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-middle"></span>
+      <span class="sidebar-toggle-line sidebar-toggle-line-last"></span>
+    </div>
+  </div>
+
+  <aside id="sidebar" class="sidebar">
+    
+    <div class="sidebar-inner">
+
+      
+
+      
+        <ul class="sidebar-nav motion-element">
+          <li class="sidebar-nav-toc sidebar-nav-active" data-target="post-toc-wrap" >
+            文章目录
+          </li>
+          <li class="sidebar-nav-overview" data-target="site-overview">
+            站点概览
+          </li>
+        </ul>
+      
+
+      <section class="site-overview sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+          
+            <img class="site-author-image" itemprop="image"
+              src="/images/icon1.jpg"
+              alt="Yanli Zhang" />
+          
+            <p class="site-author-name" itemprop="name">Yanli Zhang</p>
+            <p class="site-description motion-element" itemprop="description">今ここにいる僕が僕のすべて。</p>
+        </div>
+
+        <nav class="site-state motion-element">
+
+          
+            <div class="site-state-item site-state-posts">
+            
+              <a href="/archives/">
+            
+                <span class="site-state-item-count">7</span>
+                <span class="site-state-item-name">日志</span>
+              </a>
+            </div>
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-categories">
+              <a href="/categories/index.html">
+                <span class="site-state-item-count">3</span>
+                <span class="site-state-item-name">分类</span>
+              </a>
+            </div>
+          
+
+          
+            
+            
+            <div class="site-state-item site-state-tags">
+              <a href="/tags/index.html">
+                <span class="site-state-item-count">10</span>
+                <span class="site-state-item-name">标签</span>
+              </a>
+            </div>
+          
+
+        </nav>
+
+        
+
+        <div class="links-of-author motion-element">
+          
+            
+              <span class="links-of-author-item">
+                <a href="https://github.com/ylzhang96" target="_blank" title="GitHub">
+                  
+                    <i class="fa fa-fw fa-github"></i>GitHub</a>
+              </span>
+            
+              <span class="links-of-author-item">
+                <a href="mailto:ylzhang96@163.com" target="_blank" title="E-Mail">
+                  
+                    <i class="fa fa-fw fa-envelope"></i>E-Mail</a>
+              </span>
+            
+          
+        </div>
+
+        
+        
+
+        
+        
+
+        
+
+
+      </section>
+
+      
+      <!--noindex-->
+        <section class="post-toc-wrap motion-element sidebar-panel sidebar-panel-active">
+          <div class="post-toc">
+
+            
+              
+            
+
+            
+              <div class="post-toc-content"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#Graph-Convolutional-Network"><span class="nav-number">1.</span> <span class="nav-text">Graph Convolutional Network</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Introduction"><span class="nav-number">2.</span> <span class="nav-text">Introduction</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#Why-Graph"><span class="nav-number">2.1.</span> <span class="nav-text">Why Graph</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Why-Convolution"><span class="nav-number">2.2.</span> <span class="nav-text">Why Convolution</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Comparison-with-Graph-Embedding"><span class="nav-number">2.3.</span> <span class="nav-text">Comparison with Graph Embedding</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Generalize-Convolution"><span class="nav-number">2.4.</span> <span class="nav-text">Generalize Convolution</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#GCN"><span class="nav-number">3.</span> <span class="nav-text">GCN</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#傅里叶级数-Fourier-Series"><span class="nav-number">3.1.</span> <span class="nav-text">傅里叶级数(Fourier Series)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#三角函数系"><span class="nav-number">3.1.1.</span> <span class="nav-text">三角函数系</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#T-2-pi-的函数展开为傅里叶级数-Fourier-Series"><span class="nav-number">3.1.2.</span> <span class="nav-text">$T=2\pi$的函数展开为傅里叶级数(Fourier Series)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#T-2L-的函数展开为傅里叶级数-Fourier-Series"><span class="nav-number">3.1.3.</span> <span class="nav-text">$T=2L$的函数展开为傅里叶级数(Fourier Series)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#欧拉公式"><span class="nav-number">3.1.4.</span> <span class="nav-text">欧拉公式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#傅里叶级数的复数形式"><span class="nav-number">3.1.5.</span> <span class="nav-text">傅里叶级数的复数形式</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#理解Fourier-Series"><span class="nav-number">3.1.6.</span> <span class="nav-text">理解Fourier Series</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#傅里叶变换-Fourier-Transformation"><span class="nav-number">3.2.</span> <span class="nav-text">傅里叶变换(Fourier Transformation)</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#理解傅里叶变换"><span class="nav-number">3.2.1.</span> <span class="nav-text">理解傅里叶变换</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Laplacian-Matrix"><span class="nav-number">3.3.</span> <span class="nav-text">Laplacian Matrix</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#拉普拉斯算子-Laplacian-Operator"><span class="nav-number">3.3.1.</span> <span class="nav-text">拉普拉斯算子(Laplacian Operator)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#拉普拉斯矩阵-Laplacian-Matrix"><span class="nav-number">3.3.2.</span> <span class="nav-text">拉普拉斯矩阵(Laplacian Matrix)</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#拉普拉斯矩阵的特征分解"><span class="nav-number">3.3.3.</span> <span class="nav-text">拉普拉斯矩阵的特征分解</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Graph-Fourier-Transformation"><span class="nav-number">3.4.</span> <span class="nav-text">Graph Fourier Transformation</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#Graph-Convolution"><span class="nav-number">3.5.</span> <span class="nav-text">Graph Convolution</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#GCN-1"><span class="nav-number">3.6.</span> <span class="nav-text">GCN</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#GraphSAGE"><span class="nav-number">4.</span> <span class="nav-text">GraphSAGE</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#References"><span class="nav-number">5.</span> <span class="nav-text">References</span></a></li></ol></div>
+            
+
+          </div>
+        </section>
+      <!--/noindex-->
+      
+
+      
+
+    </div>
+  </aside>
+
+
+        
+      </div>
+    </main>
+
+    <footer id="footer" class="footer">
+      <div class="footer-inner">
+        <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+<div class="copyright" >
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Yanli Zhang</span>
+
+  
+</div>
+
+
+  <div class="powered-by">由 <a class="theme-link" href="https://hexo.io">Hexo</a> 强力驱动</div>
+
+  <span class="post-meta-divider">|</span>
+
+  <div class="theme-info">主题 &mdash; <a class="theme-link" href="https://github.com/iissnan/hexo-theme-next">NexT.Pisces</a> v5.1.2</div>
+
+
+
+        
+<div class="busuanzi-count">
+  <script async src="https://dn-lbstatics.qbox.me/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+  
+    <span class="site-uv">
+      <i class="fa fa-user"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_uv"></span>
+      
+    </span>
+  
+
+  
+    <span class="site-pv">
+      <i class="fa fa-eye"></i>
+      <span class="busuanzi-value" id="busuanzi_value_site_pv"></span>
+      
+    </span>
+  
+</div>
+
+
+
+
+
+
+
+
+        
+      </div>
+    </footer>
+
+    
+      <div class="back-to-top">
+        <i class="fa fa-arrow-up"></i>
+        
+      </div>
+    
+
+  </div>
+
+  
+
+<script type="text/javascript">
+  if (Object.prototype.toString.call(window.Promise) !== '[object Function]') {
+    window.Promise = null;
+  }
+</script>
+
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script type="text/javascript" src="/lib/jquery/index.js?v=2.1.3"></script>
+
+  
+  <script type="text/javascript" src="/lib/fastclick/lib/fastclick.min.js?v=1.0.6"></script>
+
+  
+  <script type="text/javascript" src="/lib/jquery_lazyload/jquery.lazyload.js?v=1.9.7"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/velocity/velocity.ui.min.js?v=1.2.1"></script>
+
+  
+  <script type="text/javascript" src="/lib/fancybox/source/jquery.fancybox.pack.js?v=2.1.5"></script>
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/utils.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/motion.js?v=5.1.2"></script>
+
+
+
+  
+  
+
+
+  <script type="text/javascript" src="/js/src/affix.js?v=5.1.2"></script>
+
+  <script type="text/javascript" src="/js/src/schemes/pisces.js?v=5.1.2"></script>
+
+
+
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.2"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.2"></script>
+
+
+  
+  <script type="text/javascript" src="/js/src/scrollspy.js?v=5.1.2"></script>
+<script type="text/javascript" src="/js/src/post-details.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  <script type="text/javascript" src="/js/src/bootstrap.js?v=5.1.2"></script>
+
+
+
+  
+
+
+  
+
+
+
+
+	
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+  
+
+
+
+
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+</body>
+</html>
