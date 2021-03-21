@@ -1,0 +1,1326 @@
+<?xml version="1.0" encoding="utf-8"?>
+<search>
+  <entry>
+    <title>Graph Convolutional Network</title>
+    <url>/2019/08/22/Graph-Convolutional-Network/</url>
+    <content><![CDATA[<h2 id="Graph-Convolutional-Network"><a href="#Graph-Convolutional-Network" class="headerlink" title="Graph Convolutional Network"></a>Graph Convolutional Network</h2><h2 id="Introduction"><a href="#Introduction" class="headerlink" title="Introduction"></a>Introduction</h2><h3 id="Why-Graph"><a href="#Why-Graph" class="headerlink" title="Why Graph"></a>Why Graph</h3><p>图是科学研究中一种常用的数据结构，可用于描述物体（<strong>结点</strong>）与它们之间的关系（<strong>边</strong>），例如社交网络、知识图谱等。<br>然而，区别于图像这类Euclidean Structure（像素点是排列整齐的矩阵），图是一种<strong>Non-Euclidean Structure</strong>。</p>
+<h3 id="Why-Convolution"><a href="#Why-Convolution" class="headerlink" title="Why Convolution"></a>Why Convolution</h3><p>传统卷积，本质上是一种<strong>加权求和</strong>。CNN中，卷积核的参数通过优化求出，能够提取多尺度的局部空间特征（multi-scale localized spatial features），主要应用于欧式结构的数据上（可保证卷积的平移不变性）。<br>比起FNN，CNN的优点主要有以下三点：</p>
+<ul>
+<li>局部连接（local connection）=&gt; 图本身具有局部连接性  </li>
+<li>共享权重（shared weights）=&gt; 共享参数能够减少传统谱图方法的计算复杂性</li>
+<li>多层（multi-layer）=&gt; 适合提取多层次的特征</li>
+</ul>
+<p>然而图是非欧式结构的，无法保证拓扑图中每个顶点的相邻顶点数目相同，便无法使用相同尺寸的传统卷积核进行卷积运算，GCN的理论主要是为了引入可以优化的卷积参数。（<strong>相对传统GNN的好处呢</strong>）</p>
+<a id="more"></a>
+<h3 id="Comparison-with-Graph-Embedding"><a href="#Comparison-with-Graph-Embedding" class="headerlink" title="Comparison with Graph Embedding"></a>Comparison with Graph Embedding</h3><p>Graph Embedding旨在将图上的每个结点映射为低维向量，例如DeepWalk，node2vec等方法，然而它存在以下问题：</p>
+<ul>
+<li>每个结点都要映射成一个向量，向量之间没有共享参数，计算复杂度大<ul>
+<li>难以处理动态图，新增一个结点就要重新训练整个图（<strong>但是GCN也需要重新训练，GraphSAGE不一定需要</strong>）</li>
+<li><strong>？无监督和半监督</strong>，传统的Graph Embedding只关注图的局部空间结构，并不关注具体结点的特征（不针对具体的task）；而GCN更多是关注于一个具体的task，训练时可引入部分结点的label信息，包括结点本身的特性。</li>
+</ul>
+</li>
+</ul>
+<h3 id="Generalize-Convolution"><a href="#Generalize-Convolution" class="headerlink" title="Generalize Convolution"></a>Generalize Convolution</h3><p>如何在图上推广卷积，总体来说可以分为两类：</p>
+<ul>
+<li><p>Spatial Domain（Non-Spectral Domain）</p>
+<ul>
+<li>找出neighbor（如何定义每个顶点的neighbor，如何处理不同数目的neighbor）</li>
+<li>聚合neighbor（如何聚合）</li>
+</ul>
+</li>
+<li><p>Spectral Domain</p>
+<ul>
+<li>利用图谱理论（Spectral Graph Theory），借助图的拉普拉斯矩阵的特征值和特征向量推广图上的傅里叶变换，从而定义图上的卷积（联系卷积定理）</li>
+</ul>
+</li>
+</ul>
+<p>几乎所有的Spectral Domain方法都需要使用拉普拉斯矩阵，这就使得它必须针对一个具体的图训练（transductive learning），改变图就需要重新训练，而Spatial Domain方法不一定需要（<strong>inductive learning，在图改变不大时</strong>）。<br>Spatial Domain方法更为直观，直接定义图中空间相邻的顶点，但是主要需要考虑如何对不同数目的邻居进行聚合操作，以及怎么保持CNN的局部不变性。</p>
+<h2 id="GCN"><a href="#GCN" class="headerlink" title="GCN"></a>GCN</h2><h3 id="傅里叶级数-Fourier-Series"><a href="#傅里叶级数-Fourier-Series" class="headerlink" title="傅里叶级数(Fourier Series)"></a>傅里叶级数(Fourier Series)</h3><p>光的色散现象：光是一种波，光的颜色由振幅和频率所决定。经过一个三棱镜的折射后，白色的光波被分解为七色光波（实际是无数种颜色的光波）。<br>任何周期函数，都可以使用傅里叶笔级数展开法，将它们分解为有限或无限个不同频率不同振幅的正弦函数（余弦函数）的叠加。</p>
+<h4 id="三角函数系"><a href="#三角函数系" class="headerlink" title="三角函数系"></a>三角函数系</h4><p><strong>三角函数系${1, \sin{x}, \cos{x}, \sin{2x}, \cos{2x}, …, \sin{nx}, \cos{nx}, …}$在$[-\pi, \pi]$上正交，即其中任意两个不同的函数之积在$[-\pi, \pi]$上的积分等于0. 但在三角函数系中两个相同的函数的乘积在$[-\pi, \pi]$上的积分不等于0.</strong><br>函数$f(x)$和$g(x)$在[a, b]区间正交：<br>$$\int_a^b{f(x)\cdot{g(x)}\mathrm{d}x \ = \ 0}$$<br>可以将函数看作是一个无穷维的向量，例如$[\sin{1}, \sin{2}, \sin{3}, …]$和$[\cos{1}, \cos{2}, \cos{3}, …]$，那么两个函数正交，即需要满足$\sin{1}\cdot\cos{1}+\sin{2}\cdot\cos{2}+\sin{3}\cdot\cos{3}+…=0$，两个向量对应维度乘积再求和，对应为两个函数乘积再积分。</p>
+<blockquote>
+<p><strong>证明：</strong><br>显然<br>$$<br>\begin{aligned}<br>1) \ \int<em>{-\pi}^{\pi}1\cdot \cos{nx}\, \mathrm{d}x \ = \ \int</em>{<br>-\pi}^{\pi}1\cdot \sin{nx}\, \mathrm{d}x \ = \ 0 \qquad (n=1, 2, …) \<br>\end{aligned}<br>$$<br>由积化和差可得<br>$$<br>\begin{aligned}<br>2) \ &amp;\int<em>{-\pi}^{\pi}\cos{nx}\cdot \cos{mx}\, \mathrm{d}x \ = \ \int</em>{-\pi}^{\pi}\frac{\cos{(n+m)x}+\cos{(n-m)x}}{2}\, \mathrm{d} x \<br>= \ &amp;\frac{1}{2}\, [\frac{\sin{(n+m)x}}{n+m}+\frac{\sin{(n-m)x}}{n-m}]<em>{-\pi}^{\pi} \ = \ 0 \qquad (n\in{N^<em>}, m\in{N^</em>}, n\neq{m}) \<br>\end{aligned}<br>$$<br>同理可证<br>$$<br>\begin{aligned}<br>3) \ &amp;\int</em>{-\pi}^{\pi}\sin{nx}\cdot \sin{mx}\, \mathrm{d}x \ = \ 0 \qquad (n\in{N^<em>}, m\in{N^</em>}, n\neq{m}) \<br>4) \ &amp;\int<em>{-\pi}^{\pi}\cos{nx}\cdot \sin{mx}\, \mathrm{d}x \ = \ 0  \qquad (n\in{N^<em>}, m\in{N^</em>}) \<br>\end{aligned}<br>$$<br>又<br>$$<br>\begin{aligned}<br>5) \ &amp;\int</em>{-\pi}^{\pi}1\cdot 1 \, \mathrm{d}x \ = \ 2\pi \<br>6) \ &amp;\int<em>{-\pi}^{\pi}\cos^2{nx} \, \mathrm{d}x \ = \ \pi \qquad (n\in{N^*}) \<br>7) \ &amp;\int</em>{-\pi}^{\pi}\sin^2{nx} \, \mathrm{d}x \ = \ \pi \qquad (n\in{N^*}) \<br>\end{aligned}<br>$$<br>得证</p>
+</blockquote>
+<h4 id="T-2-pi-的函数展开为傅里叶级数-Fourier-Series"><a href="#T-2-pi-的函数展开为傅里叶级数-Fourier-Series" class="headerlink" title="$T=2\pi$的函数展开为傅里叶级数(Fourier Series)"></a>$T=2\pi$的函数展开为傅里叶级数(Fourier Series)</h4><p>$$<br>f(x) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{nx}+b_n\sin{nx}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\mathrm{d}x \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\cos{nx}\mathrm{d}x \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\sin{nx}\mathrm{d}x<br>\end{aligned}<br>\right.<br>$$</p>
+<ul>
+<li><p>确定$a_0$：对$f(x)$两边求积分</p>
+<blockquote>
+<p>$$<br>\begin{aligned}<br>\int<em>{-\pi}^{\pi}f(x)\mathrm{d}x \ &amp;= \int</em>{-\pi}^{\pi}\frac{a<em>0}{2}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}a<em>n\cos{nx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}b_n\sin{nx}\mathrm{d}x \<br>&amp;= \frac{a<em>0}{2}\int</em>{-\pi}^{\pi}\mathrm{d}x+\sum_{n=1}^{\infty}a<em>n\int</em>{-\pi}^{\pi}1\cdot\cos{nx}\mathrm{d}x+\sum_{n=1}^{\infty}b<em>n\int</em>{-\pi}^{\pi}1\cdot\sin{nx}\mathrm{d}x \qquad &amp;{\text{（对x积分与$a_n$无关）}} \<br>&amp;= \frac{a<em>0}{2}\cdot{2\pi}+\sum</em>{n=1}^{\infty}a<em>n\cdot{0}+\sum</em>{n=1}^{\infty}b_n\cdot{0} \qquad &amp;{\text{（三角函数的正交性）}} \<br>&amp;= \pi\cdot{a_0} \<br>\Rightarrow a<em>0 \ &amp;= \ \frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\mathrm{d}x \<br>\end{aligned}<br>$$</p>
+</blockquote>
+</li>
+<li><p>确定$a_n$：两边同乘$\cos{mx}$后积分</p>
+<blockquote>
+<p>$$<br>\begin{aligned}<br>\int<em>{-\pi}^{\pi}f(x)\cos{mx}\mathrm{d}x \ &amp;= \int</em>{-\pi}^{\pi}\frac{a<em>0}{2}\cos{mx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x+\int</em>{-\pi}^{\pi}\sum_{n=1}^{\infty}b_n\sin{nx}\cos{mx}\mathrm{d}x \<br>&amp;= \frac{a<em>0}{2}\int</em>{-\pi}^{\pi}\cos{mx}\cdot{1}\mathrm{d}x+\int<em>{-\pi}^{\pi}\sum</em>{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x+\sum</em>{n=1}^{\infty}b<em>n\int</em>{-\pi}^{\pi}\sin{nx}\cos{mx}\mathrm{d}x \qquad \<br>&amp;= \int<em>{-\pi}^{\pi}\sum</em>{n=1}^{\infty}a<em>n\cos{nx}\cos{mx}\mathrm{d}x \qquad &amp;{\text{（三角函数的正交性）}} \<br>&amp;= \int</em>{-\pi}^{\pi}a_n\cos{nx}\cos{nx}\mathrm{d}x \qquad &amp;{\text{（$n=m$时才保留）}} \<br>&amp;= \pi\cdot{a_n} \<br>\Rightarrow a<em>n \ &amp;= \ \frac{1}{\pi}\int</em>{-\pi}^{\pi}f(x)\cos{nx}\mathrm{d}x \<br>\end{aligned}<br>$$</p>
+</blockquote>
+</li>
+<li><p>确定$b_n$：如上两边同乘$\sin{mx}$后积分</p>
+</li>
+</ul>
+<h4 id="T-2L-的函数展开为傅里叶级数-Fourier-Series"><a href="#T-2L-的函数展开为傅里叶级数-Fourier-Series" class="headerlink" title="$T=2L$的函数展开为傅里叶级数(Fourier Series)"></a>$T=2L$的函数展开为傅里叶级数(Fourier Series)</h4><p>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>\qquad<br>\ ( \omega \ = \ \frac{\pi}{L} \ = \ \frac{2\pi}{T})<br>$$</p>
+<blockquote>
+<p><strong>证明：</strong><br>换元，令$x=\frac{\pi}{L}t$，则$t=\frac{L}{\pi}x$<br>因为f(t)是以$2L$为周期的周期函数，令$f(t)=f(\frac{L}{\pi}x)=g(x)$<br>则$g(x+2\pi)=f(\frac{L}{\pi}x+\frac{L}{\pi}\cdot2\pi)=f(\frac{L}{\pi}x+2L)=f(\frac{L}{\pi}x)=g(x)$是以$2\pi$为周期的周期函数<br>所以<br>$$<br>g(x) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{nx}+b_n\sin{nx}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\mathrm{d}x \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\cos{nx}\mathrm{d}x \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-\pi}^{\pi}g(x)\sin{nx}\mathrm{d}x<br>\end{aligned}<br>\right.<br>$$<br>代入$x=\frac{\pi}{L}t$，所以<br>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{\frac{n\pi}{L}t}+b_n\sin{\frac{n\pi}{L}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\cos{\frac{n\pi}{L}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{1}{\pi}\int</em>{-L}^{L}f(t)\sin{\frac{n\pi}{L}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>$$<br>工程中，由于t为正数，使用$\omega=\frac{\pi}{L}=\frac{2\pi}{T}$；由于是周期函数，可将积分区间从$[-L, L]$变为$[0, 2L]$即$[0, T]$，证毕。</p>
+</blockquote>
+<h4 id="欧拉公式"><a href="#欧拉公式" class="headerlink" title="欧拉公式"></a>欧拉公式</h4><h4 id="傅里叶级数的复数形式"><a href="#傅里叶级数的复数形式" class="headerlink" title="傅里叶级数的复数形式"></a>傅里叶级数的复数形式</h4><p>$$f(t) \ = \ \sum_{n=-\infty}^{\infty}{c_n}{e^{in{\omega}t}} \qquad c_n \ = \frac{1}{T}\int_0^T{f(t)e^{-in{\omega}t}\mathrm{d}t} \qquad \omega \ = \ \frac{2\pi}{T}$$</p>
+<blockquote>
+<p><strong>证明：</strong><br>由欧拉公式<br>$$e^{i\theta}=cos{\theta}+isin{\theta}$$<br>则<br>$$<br>\left{<br>\begin{aligned}<br>&amp;\cos{\theta} \ = \ \frac{1}{2}(e^{i\theta}+e^{-i\theta}) \<br>&amp;\sin{\theta} \ = \ -\frac{1}{2}i(e^{i\theta}-e^{-i\theta})<br>\end{aligned}<br>\right.<br>$$<br>代入<br>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>$$<br>$$f(t)\ = \ \frac{a<em>0}{2} + \sum</em>{n=1}^{\infty}{[\frac{1}{2}{a_n}(e^{in{\omega}t}+e^{-in{\omega}t})-\frac{1}{2}i{b_n}(e^{in{\omega}t}-e^{-in{\omega}t})]}$$</p>
+</blockquote>
+<h4 id="理解Fourier-Series"><a href="#理解Fourier-Series" class="headerlink" title="理解Fourier Series"></a>理解Fourier Series</h4><p>$$<br>f(t) \ = \ \frac{a<em>0}{2} +\sum^{\infty}</em>{n=1}{a_n\cos{n{\omega}t}+b_n\sin{n{\omega}t}} \qquad<br>\left{<br>\begin{aligned}<br>&amp;a<em>0=\frac{2}{T}\int</em>{0}^{T}f(t)\mathrm{d}t \<br>&amp;a<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\cos{n{\omega}t}\mathrm{d}t \<br>&amp;b<em>n=\frac{2}{T}\int</em>{0}^{T}f(t)\sin{n{\omega}t}\mathrm{d}t<br>\end{aligned}<br>\right.<br>\qquad<br>\ ( \omega \ = \ \frac{\pi}{L} \ = \ \frac{2\pi}{T})<br>$$</p>
+<p>其中$n\omega=\frac{2{\pi}n}{T}$是频率。</p>
+<ul>
+<li><p>理解一：将一个周期函数从<strong>时域</strong>（时间与振幅的关系）转化为<strong>频域</strong>（频率与振幅的关系）<br>经过分解后的函数可以用另一幅图来表示，横坐标为各个分量的频率（不断递增的整数），纵坐标为对应振幅。即图中，侧面观看到的$S(f)$。也就是说，频域图中每个点(频率，振幅) 对应的就是一个正弦函数中的频率和振幅参数。所有正弦函数的频率和振幅参数点组成整幅频域图。</p>
+</li>
+<li><p>理解二：将周期函数转化为一组<strong>正交基</strong>下的<strong>坐标表示</strong><br>描述向量的时候，都有对应的基，即在某组基下的坐标表示构成了向量。默认是单位基时，则不显式提到。<br>某个周期函数是在正弦函数系作为正交基下的傅里叶级数向量。给定周期函数T，频率图中的横坐标频率值所代表的三角函数就是傅里叶级数的正交基，即$(1, \cos{\frac{(2{\pi}n)}{T}}, \sin{\frac{(2{\pi}{n})}{T}} )$，而其系数$(\frac{a_0}{2}, a_n, b_n)$构成的向量就是傅里叶级数。</p>
+</li>
+</ul>
+<h3 id="傅里叶变换-Fourier-Transformation"><a href="#傅里叶变换-Fourier-Transformation" class="headerlink" title="傅里叶变换(Fourier Transformation)"></a>傅里叶变换(Fourier Transformation)</h3><h4 id="理解傅里叶变换"><a href="#理解傅里叶变换" class="headerlink" title="理解傅里叶变换"></a>理解傅里叶变换</h4><p>傅里叶变换可以从多种角度进行表述。<br>从<strong>数学</strong>角度，傅立叶变换就是将周期函数转化为一组<strong>正交基</strong>下的<strong>坐标表示</strong>，这个坐标表示就是傅立叶变换的结果。换句话说，周期函数是这些<strong>正交基的线性组合</strong>（向量的叠加），线性组合系数构成的向量就是傅立叶变换的结果。<br>从<strong>信号处理</strong>领域角度，傅里叶变换将一个周期函数从<strong>时域</strong>（时间与振幅的关系）转化为<strong>频域</strong>（频率与振幅的关系）。做个类比，正交基选择的是正弦函数，每个正弦函数有个频率参数值，而每个正弦函数的振幅参数就是该基下对应的坐标值。所有正弦函数的振幅构成的向量就是傅立叶变换的结果。</p>
+<p>函数理解为向量（无穷维的）<br>如果一个空间有一组基两两正交，那么它就叫做一组正交基。<br>傅里叶级数是用三角函数作为基函数的。</p>
+<p>傅里叶级数实际上就是把这个空间中的一个向量（函数）通过基的线性组合的方式写出来。<br>（唯一性=&gt;正交性，线性无关（不平行）=&gt;正交（垂直），基=&gt;正交基）<br>正交 和别人是0 要求的系数只需要$f(t)$和自己做内积（复数的话是共轭做内积）</p>
+<p>正交空间（酉空间）的坐标变换</p>
+<p>傅里叶变换只是推广成了积分<br>$$f(t)\ =\ \frac{1}{2\pi}\int<em>{-\infty}^{\infty}{\int^{\infty}</em>{\infty}f(t)e^{-i{\omega}t}\mathrm{d}te^{i{\omega}t}\mathrm{d}{\omega}}$$</p>
+<p>$$F(\omega) \ = \ \int^{\infty}_{\infty}f(t)e^{-i{\omega}t}\mathrm{d}t$$<br>$\omega$取遍整个频域的横坐标，但仍然是基，在这个基上的取值是$F(\omega)$</p>
+<p>e^(jwt) 在复平面中，可以作为一个“基”，因为它已经包含了实轴（实数单位“1”）上和虚轴（虚数单位“j”）上两个正交的“基”。</p>
+<p>我们说正弦波是正交的，意思是e^(jwt) e^(-jw’t)积分后是delta函数，w’=w时为无穷大，否则为0。</p>
+<p><a href="https://www.zhihu.com/question/19714540" target="_blank" rel="external">https://www.zhihu.com/question/19714540</a></p>
+<p>三角函数的定义就是通过指数函数的<br><a href="https://www.zhihu.com/question/26135850/answer/32260694" target="_blank" rel="external">https://www.zhihu.com/question/26135850/answer/32260694</a></p>
+<h3 id="Laplacian-Matrix"><a href="#Laplacian-Matrix" class="headerlink" title="Laplacian Matrix"></a>Laplacian Matrix</h3><h4 id="拉普拉斯算子-Laplacian-Operator"><a href="#拉普拉斯算子-Laplacian-Operator" class="headerlink" title="拉普拉斯算子(Laplacian Operator)"></a>拉普拉斯算子(Laplacian Operator)</h4><h4 id="拉普拉斯矩阵-Laplacian-Matrix"><a href="#拉普拉斯矩阵-Laplacian-Matrix" class="headerlink" title="拉普拉斯矩阵(Laplacian Matrix)"></a>拉普拉斯矩阵(Laplacian Matrix)</h4><h4 id="拉普拉斯矩阵的特征分解"><a href="#拉普拉斯矩阵的特征分解" class="headerlink" title="拉普拉斯矩阵的特征分解"></a>拉普拉斯矩阵的特征分解</h4><p>拉普拉斯矩阵是半正定对称矩阵，因此其特征值均非负，且特征向量互相正交，构成正交矩阵U</p>
+<p>e^-iwt是拉普拉斯算子的特征函数，频率\omega和特征值有关  ？因还是果  是因为傅里叶变换eiwt所以图上推广拉普拉斯算子 拉普拉斯矩阵的特征向量  还是因为拉普拉斯算子所以eiwt，【看看？拉普拉斯变换】</p>
+<p>拉普拉斯矩阵的特征向量</p>
+<p>现在有一个f，f与图的顶点一一对应，</p>
+<h3 id="Graph-Fourier-Transformation"><a href="#Graph-Fourier-Transformation" class="headerlink" title="Graph Fourier Transformation"></a>Graph Fourier Transformation</h3><h3 id="Graph-Convolution"><a href="#Graph-Convolution" class="headerlink" title="Graph Convolution"></a>Graph Convolution</h3><h3 id="GCN-1"><a href="#GCN-1" class="headerlink" title="GCN"></a>GCN</h3><h2 id="GraphSAGE"><a href="#GraphSAGE" class="headerlink" title="GraphSAGE"></a>GraphSAGE</h2><h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="https://www.zhihu.com/question/54504471/answer/332657604" target="_blank" rel="external">如何理解 Graph Convolutional Network（GCN）？ - superbrother的回答 - 知乎</a></li>
+<li><a href="https://www.zhihu.com/question/54504471/answer/630639025" target="_blank" rel="external">如何理解 Graph Convolutional Network（GCN）？ - Johnny Richards的回答 - 知乎</a></li>
+<li><a href="http://xtf615.com/2019/02/24/gcn/" target="_blank" rel="external">Graph Convolutional Networks @xuetf</a></li>
+<li><a href="">Graph Neural Network: A Review of Methods and Application</a></li>
+<li><a href="https://www.bilibili.com/video/av63251517" target="_blank" rel="external">【谜之舒适】12分钟的傅立叶级数动画 UP主：3Blue1Brown</a></li>
+</ul>
+]]></content>
+      <categories>
+        <category>Computer Science</category>
+      </categories>
+      <tags>
+        <tag>Computer Science</tag>
+        <tag>Deep Learning</tag>
+        <tag>Graph Convolutional Network</tag>
+        <tag>doing</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Hello, My Page</title>
+    <url>/2017/09/15/Hello-My-Page/</url>
+    <content><![CDATA[<h1 id="Hello-My-Page"><a href="#Hello-My-Page" class="headerlink" title="Hello, My Page"></a>Hello, My Page</h1><ul>
+<li>Use <code>Github Pages</code> and <code>Hexo</code> to host your own blog.</li>
+</ul>
+<h2 id="Install-and-Config"><a href="#Install-and-Config" class="headerlink" title="Install and Config"></a>Install and Config</h2><h3 id="GitHub-Pages"><a href="#GitHub-Pages" class="headerlink" title="GitHub Pages"></a>GitHub Pages</h3><ol>
+<li>You need to <code>Register GitHub</code> and <code>Install Git</code></li>
+<li>New repository, repository name is <code>yourname.github.io</code></li>
+<li>Settings - GitHub Pages - Launch automatic page generator</li>
+</ol>
+<a id="more"></a>
+<h3 id="Hexo"><a href="#Hexo" class="headerlink" title="Hexo"></a>Hexo</h3><ol>
+<li>Install <a href="https://nodejs.org/en/" target="_blank" rel="external">Node.js</a>, since you need use <code>npm</code>(node package management)</li>
+<li><p>Choose an empty folder, for example <code>hexo</code>, input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ <span class="built_in">cd</span> hexo</div><div class="line">$ npm install hexo-cli -g</div><div class="line">$ npm install hexo --save</div></pre></td></tr></table></figure>
+</li>
+<li><p>Input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo -v</div></pre></td></tr></table></figure>
+</li>
+<li><p>If you can see the version information, you have successfully install Hexo.</p>
+</li>
+<li>My structure is like below. Some folders will be added after following steps, and now you can ignore it.<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">- hexo</div><div class="line">  - .deploy_git</div><div class="line">  - node_modules</div><div class="line">  - public</div><div class="line">  - scaffolds</div><div class="line">  - source</div><div class="line">    - _posts</div><div class="line">    - about</div><div class="line">    - tags</div><div class="line">    - categories</div><div class="line">    - images</div><div class="line">  - themes</div><div class="line">    - landscape</div><div class="line">    - next</div><div class="line">  .gitignore</div><div class="line">  _config.yml</div><div class="line">  db.json</div><div class="line">  debug.log</div><div class="line">  package.json</div></pre></td></tr></table></figure>
+</li>
+</ol>
+<h3 id="Configuration"><a href="#Configuration" class="headerlink" title="Configuration"></a>Configuration</h3><ol>
+<li>You can modify site settings in <code>_config.yml</code> with <a href="https://hexo.io/docs/configuration.html" target="_blank" rel="external">Docs of Configuration</a>.</li>
+</ol>
+<h3 id="Themes"><a href="#Themes" class="headerlink" title="Themes"></a>Themes</h3><ol>
+<li>You can choose your favorite Themes for your blog in <a href="https://hexo.io/themes/" target="_blank" rel="external">Themes</a> and my recommendation is <a href="https://theme-next.js.org/" target="_blank" rel="external">NexT</a>.</li>
+</ol>
+<h3 id="Busuanzi"><a href="#Busuanzi" class="headerlink" title="Busuanzi"></a>Busuanzi</h3><ol>
+<li>You can use <code>busuanzi</code> to count viewers </li>
+<li>Open <code>themes/next/layout/_config.yml</code> and modify the settings <code>enable:true</code> of <code>busuanzi_count</code> </li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">busuanzi_count:</div><div class="line">  enable:true</div></pre></td></tr></table></figure>
+<ol>
+<li>Open <code>themes/next/layout/_partials/footer.swig</code></li>
+<li>Add the following code at the beginning.</li>
+</ol>
+<figure class="highlight js"><table><tr><td class="code"><pre><div class="line">&lt;script <span class="keyword">async</span> src=<span class="string">"//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"</span>&gt;&lt;/script&gt;</div></pre></td></tr></table></figure>
+<ol>
+<li>Add the following code at the end.</li>
+</ol>
+<figure class="highlight js"><table><tr><td class="code"><pre><div class="line">&#123;% <span class="keyword">if</span> theme.busuanzi.count &amp;&amp; theme.busuanzi.count.enable %&#125;</div><div class="line">  &lt;span id=<span class="string">"busuanzi_container_site_pv"</span>&gt;总访问量&lt;span id=<span class="string">"busuanzi_value_site_pv"</span>&gt;&lt;/span&gt;次&lt;<span class="regexp">/span&gt;</span></div><div class="line"><span class="regexp">  &lt;span class="post-meta-divider"&gt;|&lt;/</span>span&gt;</div><div class="line">  &lt;span id=<span class="string">"busuanzi_container_site_uv"</span>&gt;总访客数&lt;span id=<span class="string">"busuanzi_value_site_uv"</span>&gt;&lt;/span&gt;人&lt;<span class="regexp">/span&gt;</span></div><div class="line"><span class="regexp">&#123;% endif %&#125;</span></div></pre></td></tr></table></figure>
+<h2 id="Create-and-Deploy"><a href="#Create-and-Deploy" class="headerlink" title="Create and Deploy"></a>Create and Deploy</h2><h3 id="Create-a-new-post"><a href="#Create-a-new-post" class="headerlink" title="Create a new post"></a>Create a new post</h3><ol>
+<li><p>Input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo new <span class="string">"My New Post"</span></div></pre></td></tr></table></figure>
+</li>
+<li><p>You can write your post like</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">---</div><div class="line"># Yaml or Json</div><div class="line">title: Hello, My Page</div><div class="line">date: 2017-09-15 00:00:00</div><div class="line">updated: 2021-03-20</div><div class="line">tags: </div><div class="line">    - GitHub Pages</div><div class="line">    - Hexo</div><div class="line">    - NexT</div><div class="line">    - CS Learning</div><div class="line">categories: </div><div class="line">    - CS Learning</div><div class="line">---</div><div class="line">&lt;!-- Markdown --&gt;</div><div class="line"># Hello, My Page</div></pre></td></tr></table></figure>
+</li>
+<li><p><a href="https://hexo.io/docs/writing.html" target="_blank" rel="external">More Detail for writting</a></p>
+</li>
+<li><a href="https://hexo.io/docs/front-matter.html" target="_blank" rel="external">More Detail for front matter</a></li>
+</ol>
+<h3 id="Create-a-new-page-such-as-about-tags-categories"><a href="#Create-a-new-page-such-as-about-tags-categories" class="headerlink" title="Create a new page(such as about/tags/categories)"></a>Create a new page(such as about/tags/categories)</h3><ol>
+<li><p>Input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo new page <span class="string">"about"</span></div></pre></td></tr></table></figure>
+</li>
+<li><p>You will find a new folder named <code>about</code> in your source folder, and a <code>index.md</code> file in it.</p>
+</li>
+<li>You can write your <code>index.md</code> like<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">---</div><div class="line">title: 关于</div><div class="line">date: 2017-09-17 15:53:11</div><div class="line">type: &quot;about&quot;</div><div class="line">---</div><div class="line">## About me.</div></pre></td></tr></table></figure>
+</li>
+</ol>
+<h3 id="Run-server"><a href="#Run-server" class="headerlink" title="Run server"></a>Run server</h3><ol>
+<li><p>The first time you want to run server, you need install <code>hexo-server</code>, which has been separated from the main module.</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ npm install hexo-server --save</div></pre></td></tr></table></figure>
+</li>
+<li><p>Once the server has been installed, input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo server  // or you can input `hexo s`</div></pre></td></tr></table></figure>
+</li>
+<li><p>Your website will run at <code>http://localhost:4000</code>. It’s not necessarily for you to restart the server since hexo will watch for file changes and update automatically.</p>
+</li>
+<li><a href="https://hexo.io/docs/server.html" target="_blank" rel="external">More Detail</a></li>
+</ol>
+<h3 id="Generate-and-deploy"><a href="#Generate-and-deploy" class="headerlink" title="Generate and deploy"></a>Generate and deploy</h3><ol>
+<li><p>Input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo d -g</div></pre></td></tr></table></figure>
+</li>
+<li><p><a href="https://hexo.io/docs/generating.html" target="_blank" rel="external">More Detail for Generate</a></p>
+</li>
+<li><a href="https://hexo.io/docs/deployment.html" target="_blank" rel="external">More Detail for Deploy</a></li>
+</ol>
+<h3 id="Clean-the-cache"><a href="#Clean-the-cache" class="headerlink" title="Clean the cache"></a>Clean the cache</h3><ol>
+<li><p>Input</p>
+<figure class="highlight bash"><table><tr><td class="code"><pre><div class="line">$ hexo clean</div></pre></td></tr></table></figure>
+</li>
+<li><p>You can delete the post in the <code>_post</code> folder and then clean the cache to delete the post.</p>
+</li>
+</ol>
+<h2 id="References"><a href="#References" class="headerlink" title="References"></a>References</h2><ul>
+<li><a href="https://pages.github.com/" target="_blank" rel="external">Github Pages</a></li>
+<li><a href="https://hexo.io/docs/" target="_blank" rel="external">Document of Hexo</a></li>
+<li><a href="https://theme-next.js.org/docs/getting-started/" target="_blank" rel="external">Geting Started of NexT</a></li>
+</ul>
+]]></content>
+      <categories>
+        <category>Computer Science</category>
+      </categories>
+      <tags>
+        <tag>Computer Science</tag>
+        <tag>GitHub Pages</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Markdown</title>
+    <url>/2017/09/18/Markdown/</url>
+    <content><![CDATA[<h1 id="Markdown"><a href="#Markdown" class="headerlink" title="Markdown"></a>Markdown</h1><ul>
+<li>A lightweight markup language with plain text formatting syntax</li>
+</ul>
+<h2 id="Basic-Syntax"><a href="#Basic-Syntax" class="headerlink" title="Basic Syntax"></a>Basic Syntax</h2><h3 id="Header"><a href="#Header" class="headerlink" title="Header"></a>Header</h3><figure class="highlight plain"><table><tr><td class="code"><pre><div class="line"># Header 1</div><div class="line">## Header 2</div><div class="line">### Header 3</div><div class="line">#### Header 4</div><div class="line">##### Header 5</div><div class="line">###### Header 6</div></pre></td></tr></table></figure>
+<a id="more"></a>
+<h3 id="Style"><a href="#Style" class="headerlink" title="Style"></a>Style</h3><p><code>Highlight</code><br><strong>Bold</strong> or <strong>Bold</strong><br><em>Italic</em> or <em>Italic</em><br><strong><em>Italic Bold</em></strong> or <strong><em>Italic Bold</em></strong><br><del>Strike-through</del><br><u>Evernote</u></p>
+<hr>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">`Highlight`  </div><div class="line">**Bold** or __Bold__  </div><div class="line">*Italic* or _Italic_  </div><div class="line">***Italic Bold*** or ___Italic Bold___ </div><div class="line">~~Strike-through~~</div><div class="line">&lt;u&gt;evernote&lt;/u&gt;  # Use HTML</div><div class="line">***  # A Line</div></pre></td></tr></table></figure>
+<h3 id="New-line"><a href="#New-line" class="headerlink" title="New line"></a>New line</h3><p>This is the first line.<br>This is the second line.</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">This is the first line.□□  # 2 space or 1 empty line</div><div class="line">This is the second line.</div></pre></td></tr></table></figure>
+<h3 id="Unordered-List"><a href="#Unordered-List" class="headerlink" title="Unordered List"></a>Unordered List</h3><ul>
+<li>red</li>
+<li>green</li>
+<li>blue</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">* red</div><div class="line">* green</div><div class="line">* blue</div></pre></td></tr></table></figure>
+<p><strong>or</strong></p>
+<ul>
+<li>red</li>
+<li>green</li>
+<li>blue</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">- red</div><div class="line">- green</div><div class="line">- blue</div></pre></td></tr></table></figure>
+<p><strong>or</strong></p>
+<ul>
+<li>red</li>
+<li>green</li>
+<li>blue</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">+ red</div><div class="line">+ green</div><div class="line">+ blue</div></pre></td></tr></table></figure>
+<h3 id="Ordered-List"><a href="#Ordered-List" class="headerlink" title="Ordered List"></a>Ordered List</h3><ol>
+<li>red</li>
+<li>green</li>
+<li>blue</li>
+</ol>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">1. red</div><div class="line">2. green</div><div class="line">3. blue</div></pre></td></tr></table></figure>
+<h3 id="Todo-List"><a href="#Todo-List" class="headerlink" title="Todo List"></a>Todo List</h3><ul>
+<li style="list-style: none"><input type="checkbox"> Todo 1</li>
+<li style="list-style: none"><input type="checkbox"> Todo 2</li>
+<li style="list-style: none"><input type="checkbox" checked> Done 1</li>
+<li style="list-style: none"><input type="checkbox" checked> Done 2</li>
+</ul>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">- [ ] Todo 1</div><div class="line">- [ ] Todo 2</div><div class="line">- [x] Done 1</div><div class="line">- [x] Done 2</div></pre></td></tr></table></figure>
+<p>Remember space between <code>[</code> and <code>]</code></p>
+<h3 id="Blockquote"><a href="#Blockquote" class="headerlink" title="Blockquote"></a>Blockquote</h3><blockquote>
+<p>Like this<br>then this</p>
+<blockquote>
+<p>Or this</p>
+</blockquote>
+</blockquote>
+<p>Pay attention here !</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">&gt; Like this  </div><div class="line">&gt; then this</div><div class="line">&gt; &gt; Or this</div><div class="line"></div><div class="line">Pay attention here! Use an empty line to end the blockquote.</div></pre></td></tr></table></figure>
+<h3 id="Code-Block"><a href="#Code-Block" class="headerlink" title="Code Block"></a>Code Block</h3><figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">printf(&quot;Hello World!&quot;);</div></pre></td></tr></table></figure>
+<p>Use 3 × ` before and after the code block.</p>
+<h3 id="Highlight-Code-Block"><a href="#Highlight-Code-Block" class="headerlink" title="Highlight Code Block"></a>Highlight Code Block</h3><figure class="highlight python"><table><tr><td class="code"><pre><div class="line"><span class="keyword">print</span> <span class="string">'hello world'</span></div></pre></td></tr></table></figure>
+<p>Add language name after first ‘’’</p>
+<h3 id="Link"><a href="#Link" class="headerlink" title="Link"></a>Link</h3><p><a href="https://github.com/ylzhang96" target="_blank" rel="external">My Github</a></p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">[My Github](https://github.com/ylzhang96)</div></pre></td></tr></table></figure>
+<h3 id="Image"><a href="#Image" class="headerlink" title="Image"></a>Image</h3><p><img src="http://mouapp.com/Mou_128.png" alt="Mou icon"></p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">![Mou icon](http://mouapp.com/Mou_128.png)</div></pre></td></tr></table></figure>
+<h2 id="Extended-Function"><a href="#Extended-Function" class="headerlink" title="Extended Function"></a>Extended Function</h2><p>Some editors don’t support these functions.</p>
+<h3 id="Contents"><a href="#Contents" class="headerlink" title="Contents"></a>Contents</h3><p>[TOC]</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">[TOC]</div></pre></td></tr></table></figure>
+<h3 id="Math"><a href="#Math" class="headerlink" title="Math"></a>Math</h3><p>$$e^{i\pi} + 1 = 0$$<br>Function: $e^{i\pi} + 1 = 0$</p>
+<p>More Detail in </p>
+<ul>
+<li><a href="https://khan.github.io/KaTeX/docs/supported.html" target="_blank" rel="external">See more Ketex supported function</a></li>
+<li><a href="https://www.zybuluo.com/codeep/note/163962" target="_blank" rel="external">See more Latex syntax</a></li>
+<li><a href="https://www.codecogs.com/latex/eqneditor.php" target="_blank" rel="external">Tool to write Latex</a></li>
+</ul>
+<h3 id="Table"><a href="#Table" class="headerlink" title="Table"></a>Table</h3><table>
+<thead>
+<tr>
+<th style="text-align:left">Color</th>
+<th style="text-align:center">Chinese</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left">red</td>
+<td style="text-align:center">红色</td>
+</tr>
+<tr>
+<td style="text-align:left">green</td>
+<td style="text-align:center">绿色</td>
+</tr>
+<tr>
+<td style="text-align:left">blue</td>
+<td style="text-align:center">蓝色</td>
+</tr>
+</tbody>
+</table>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">| Color    | Chinese     |</div><div class="line">| :------- | :---------: |</div><div class="line">| red      | 红色        |</div><div class="line">| green    | 绿色        |</div><div class="line">| blue     | 蓝色        |</div></pre></td></tr></table></figure>
+<h3 id="Footnote"><a href="#Footnote" class="headerlink" title="Footnote"></a>Footnote</h3><p>This is the first footnote[^1] example.<br>This is the second footnote[^2] example.</p>
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">This is the first footnote[^1] example.  </div><div class="line">This is the second footnote[^2] example.</div></pre></td></tr></table></figure>
+<h3 id="Flow-Chart"><a href="#Flow-Chart" class="headerlink" title="Flow Chart"></a>Flow Chart</h3><h3 id="Gantt-Chart"><a href="#Gantt-Chart" class="headerlink" title="Gantt Chart"></a>Gantt Chart</h3><h2 id="Tips"><a href="#Tips" class="headerlink" title="Tips"></a>Tips</h2><h3 id="Use-HTML-in-markdown"><a href="#Use-HTML-in-markdown" class="headerlink" title="Use HTML in markdown"></a>Use HTML in markdown</h3><h4 id="iframe"><a href="#iframe" class="headerlink" title="iframe"></a>iframe</h4><iframe frameborder="no" border="0" marginwidth="0" marginheight="0" width="330" height="86" src="//music.163.com/outchain/player?type=2&id=29818819&auto=0&height=66"></iframe>
+
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">&lt;iframe frameborder=&quot;no&quot; border=&quot;0&quot; marginwidth=&quot;0&quot; marginheight=&quot;0&quot; width=330 height=86 src=&quot;//music.163.com/outchain/player?type=2&amp;id=29818819&amp;auto=0&amp;height=66&quot;&gt;&lt;/iframe&gt;</div></pre></td></tr></table></figure>
+<h4 id="comment-out-code"><a href="#comment-out-code" class="headerlink" title="comment-out code"></a>comment-out code</h4><!-- What I write there you will never see -->
+<figure class="highlight plain"><table><tr><td class="code"><pre><div class="line">&lt;!-- What I write there you will never see --&gt;</div></pre></td></tr></table></figure>
+<h3 id="Sublime-Plugins"><a href="#Sublime-Plugins" class="headerlink" title="Sublime Plugins"></a>Sublime Plugins</h3><h4 id="MarkdownEditing"><a href="#MarkdownEditing" class="headerlink" title="MarkdownEditing"></a>MarkdownEditing</h4><h4 id="OmniMarkupPreviewer"><a href="#OmniMarkupPreviewer" class="headerlink" title="OmniMarkupPreviewer"></a>OmniMarkupPreviewer</h4><ul>
+<li>Ctrl + Alt + O: Preview Markup in Browser</li>
+<li>Ctrl + Alt + X: Export Markup as HTML</li>
+<li>Ctrl + Alt + C: Copy Markup as HTML</li>
+</ul>
+<h4 id="Table-Editor"><a href="#Table-Editor" class="headerlink" title="Table Editor"></a>Table Editor</h4><p>Using Sublime Plugin ‘ Table Editor’ makes table easier: <a href="https://segmentfault.com/a/1190000007935021" target="_blank" rel="external">Table Editor Usage</a></p>
+<h3 id="Markdown-for-Evernote"><a href="#Markdown-for-Evernote" class="headerlink" title="Markdown for Evernote"></a>Markdown for Evernote</h3><h4 id="Paste-Photo"><a href="#Paste-Photo" class="headerlink" title="Paste Photo"></a>Paste Photo</h4><p>You can paste the local photos to the Evernote and resize local photo after photo name.</p>
+<p>[^1]: Description of footnote 1<br>[^2]: Description of footnote 2</p>
+]]></content>
+      <categories>
+        <category>Computer Science</category>
+      </categories>
+      <tags>
+        <tag>Computer Science</tag>
+        <tag>Markdown</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>中级日语会话 学习笔记 01-04</title>
+    <url>/2020/07/12/%E4%B8%AD%E7%BA%A7%E6%97%A5%E8%AF%AD%E4%BC%9A%E8%AF%9D-%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B001-04/</url>
+    <content><![CDATA[<h2 id="01-再来日"><a href="#01-再来日" class="headerlink" title="01  再来日"></a>01  再来日</h2><h3 id="見知らぬ人に声をかける"><a href="#見知らぬ人に声をかける" class="headerlink" title="見知らぬ人に声をかける"></a>見知らぬ人に声をかける</h3><p>知らない人に声をかけるときは、必ず「すみません」をつけること。</p>
+<ul>
+<li>呼びかけの時に、｢あのう｣や｢ちょっと｣はなくてもいいけど、｢すみません｣は忘れないように。</li>
+<li>「すいません」：言いやすいように｢み｣の子音がなくなって → ｢い｣になった話し言葉、会話のときはどちらでもOK、でも改まったとき・仕事ときに使うなら｢すみません｣。</li>
+</ul>
+<p>「すみません、～」<br>「あのう／ちょっと、すみません～」</p>
+<a id="more"></a>
+<h3 id="感謝の言葉を言う"><a href="#感謝の言葉を言う" class="headerlink" title="感謝の言葉を言う"></a>感謝の言葉を言う</h3><p>｢すみません｣：感謝しながら同時に申し訳ない、謝罪の気持ちを持っている時に<br>｢ありがとうございます/ありがとうございました｣：純粋な感謝の言葉</p>
+<ul>
+<li>｢すみません｣は自分の気持ちが済まない。相手に何か申し訳ないことをしたから、自分の気持ちが済まない。また、相手に何も返せないから自分の気持ちが済まないなど謝罪、申し訳ないという気持ちを含んだ感謝。</li>
+<li>｢ありがとう｣を使うとき、相手によって丁寧度は変えてください。年上は見知らぬ人には｢ありがとうございます｣を使おう。</li>
+</ul>
+<p>「すみません」<br>「ごめんなさい」<br>「ありがとうございます」</p>
+<h3 id="「ありがとうございます」と「ありがとうございました」"><a href="#「ありがとうございます」と「ありがとうございました」" class="headerlink" title="「ありがとうございます」と「ありがとうございました」"></a>「ありがとうございます」と「ありがとうございました」</h3><p>｢ありがとうございます｣は現在形、前者は今感謝している<br>｢ありがとうございました｣は過去形、後者は過去のことに感謝している</p>
+<ul>
+<li>｢ありがとうございます｣：現在(たった今)起こったことしてもらったこと、いつもしてもらっていること</li>
+<li>｢ありがとうございました｣：過去のこと</li>
+<li>使う場面によっても少し変わる<ul>
+<li>お客様相手の仕事の場合は、会社やお店によって使い方にルールがあることも多い。過去形にすると、感謝はそこで終わってしまい、お客様との縁が切れてしまう、だから、過去形は使わないというお店もある</li>
+<li>人によっては、過去のことでも今も感謝しているのだから常に現在形がいいという人もいる</li>
+</ul>
+</li>
+</ul>
+<h3 id="｢お疲れ様です」と「お疲れさまでした」"><a href="#｢お疲れ様です」と「お疲れさまでした」" class="headerlink" title="｢お疲れ様です」と「お疲れさまでした」"></a>｢お疲れ様です」と「お疲れさまでした」</h3><ul>
+<li>｢お疲れ様｣は労いの言葉、過去形や現在形はそれほど気にしなくてもいい</li>
+<li>｢お疲れ様｣、｢ご苦労様｣と同じように目上の人が目下に対して使う言葉、相手が帰る時の挨拶は、｢お疲れ様｣以外に適当な表現がないので、現在は｢お疲れ様｣が広く使われるようになった</li>
+<li>同僚や上司に対して仕事が終わって帰る時の挨拶をちょっと考えてみよう<ul>
+<li>お互い帰る時：お疲れ様です(の方が多い)</li>
+<li>自分が残業で相手が帰る場合：お疲れ様でした</li>
+<li>自分が先に帰る場合：お先に失礼します</li>
+</ul>
+</li>
+</ul>
+<h3 id="｢失礼します」の使い方"><a href="#｢失礼します」の使い方" class="headerlink" title="｢失礼します」の使い方"></a>｢失礼します」の使い方</h3><ul>
+<li>｢失礼ですが｣：呼びかけの表現</li>
+<li>｢失礼します｣：先に帰るときと、部屋に入る時も使う</li>
+<li>｢失礼しました｣：謝罪するときと、部屋を出るときにも使う</li>
+<li>部屋を出るときの表現：「失礼します」「失礼しました」両方使われる。｢失礼しました｣はその部屋の中で相手に時間をとらせたこと迷惑をかけたかもしれない、これらから、それを謝るという意味が含まれている。世代によって感じ方が違うようだ、自分の会社や上司に聞いてそれに合わせるのが一番いい。<ul>
+<li>年配の人：｢失礼します｣を好む人も多い</li>
+<li>今の人：｢失礼しました｣を使う人が多い</li>
+</ul>
+</li>
+</ul>
+<h3 id="｢すっかり」「ずいぶん」「たいぶ」"><a href="#｢すっかり」「ずいぶん」「たいぶ」" class="headerlink" title="｢すっかり」「ずいぶん」「たいぶ」"></a>｢すっかり」「ずいぶん」「たいぶ」</h3><p>｢すっかり｣は何かが完全に変化した時に使う。<br>｢ずいぶん｣は何かの程度が激しい時に使う（思っていた以上に程度や量が多い）。</p>
+<ul>
+<li>ずいぶん：とても、だいぶ非常になどと同じように程度が激しい様子を表す副詞。程度が激しい様子。非常に。だいぶ。かなり。多く予想外だとか不本意だとかいう気持ちを込めて用いる。</li>
+<li>すっかり：程度を表す副詞ではなく変化の状態を表す副詞。以前と比較して完全にある状態になった、変化を表す言葉と一緒に使う。完全に、全部、ほとんどと言い換えることができる。<ul>
+<li>すっかり＋（どういう状態になったか）</li>
+<li>すっかり慣れた</li>
+<li>すっかり忘れた</li>
+<li>すっかり変わった</li>
+<li>すっかりきれいになった</li>
+<li>すっかり大人になった</li>
+<li>すっかりなくなってしまった</li>
+</ul>
+</li>
+<li>｢すっかり変わった｣｢ずいぶん変わった｣少し意味が違う<ul>
+<li>すっかり変わった：これは完全に／ほとんど変わった、以前とは別の街のようだ。</li>
+<li>ずいぶん変わった：思っていた以上にだいぶ変わった</li>
+</ul>
+</li>
+<li>「ずいぶん」思ってた以上に程度や量が多い時それと不本意なときによく使われる<ul>
+<li>だいぶ買い物したね：たくさん買い物した事実を伝えている</li>
+<li>ずいぶん買い物したね：ちょっと批判するような、ちょっと買いすぎたんじゃないの</li>
+</ul>
+</li>
+</ul>
+<h3 id="｢助かる」"><a href="#｢助かる」" class="headerlink" title="｢助かる」"></a>｢助かる」</h3><ul>
+<li>非常に良く使うフレーズ。実際の生活では、危機的状況は少ないので「助かる」の使い方は「手間や労力を省く、都合がいい」。自分がする手間や労力が省ける、経済的負担が少なくてすむ、他にも楽ができる、都合がいいときなどにもよく使う。また仕事スムーズに行えるなど、こういう日常の生活で使うことが多い。</li>
+</ul>
+<h2 id="02-入社"><a href="#02-入社" class="headerlink" title="02  入社"></a>02  入社</h2><h3 id="挨拶の時のお辞儀"><a href="#挨拶の時のお辞儀" class="headerlink" title="挨拶の時のお辞儀"></a>挨拶の時のお辞儀</h3><p>お客様が相手の時は敬礼を使うが、社内での簡単な挨拶の時は会釈を使うことが多い。</p>
+<ul>
+<li>頭を下げて礼をすること。日本では一般的に握手をせずにお辞儀をする。お客様が相手の時は敬礼を使うが、社内での簡単な挨拶の時は会釈を使うことが多い、最敬礼は重要な相手や謝罪など特別な時に使う礼なので余り使うことはない。<ul>
+<li>会釈（えしゃく）（軽い）（15度位）：軽く腰を曲げる程度で、廊下などですれ違う時など社内でよく使う</li>
+<li>敬礼（普通）（30度位）：お客様や上司、取引先などでの挨拶に使う丁寧な礼</li>
+<li>最敬礼（丁寧）（45度位）：お詫びや深い感謝などを表す時のもっとも丁寧な礼</li>
+</ul>
+</li>
+<li>首だけではなく腰から曲げるのが基本、一番大切なのが顔、怖い顔や不機嫌な顔ではいけない、笑顔または軽く微笑んで相手にいい印象を与えるようにしてください。</li>
+</ul>
+<h3 id="「今度」の使い方"><a href="#「今度」の使い方" class="headerlink" title="「今度」の使い方"></a>「今度」の使い方</h3><ul>
+<li>「今度」は現在、近い過去や近い未来についても使われる。「また今度」のように「また」が一緒に使われる時は「この次」でいい。それ以外では、文全体を見て、文脈から判断しなければいけない。今度が近い過去や現在のことなら「今回、このたび」、未来のことなら「この次」。「この度」は丁寧な形なので、挨拶などの改まった時に使われる言葉。</li>
+</ul>
+<p>「今度の作品は前回以上に素晴らしい。（今回）」<br>「また今度遊びに来てください。　　　（この次）」<br>「今度隣に引っ越してきた佐藤です。　（この度／丁寧）」<br>「今度（今回／こんかい）の上海旅行とても楽しかったです。今度（その次／そのつぎ）来る時は家族全員で来たいです。」</p>
+<h3 id="前置きの「～が／～けど／～けれども」"><a href="#前置きの「～が／～けど／～けれども」" class="headerlink" title="前置きの「～が／～けど／～けれども」"></a>前置きの「～が／～けど／～けれども」</h3><p>「が」や「けど」は逆接を表すものだが、他にも前置きなど逆接以外の使い方もある。前置きとは本題に入る前に、言う言葉。<br>前置きの時は、基本は｢が｣と｢けど｣はどっちでもいいけど。<br>逆接・対比の場合は、女性は｢けど｣を使わなければいけない。</p>
+<ul>
+<li>｢質問がありますから、今時間ありますか」：相談がありますから、チケットをもらったから、のように理由表現の「から／ので」を使うのは、間違いではないが、自然ではない。相手を誘うや依頼する時に「から」を使うと、少し強引な感じがする、自分中心に考えてる感じがするので、よくない。こういうときは前置きの「が」を使う。ー＞「質問がありますが、今じかんありますか。」</li>
+<li>「が」や「けど」は逆接を表すものだが、他にも前置きなど逆接以外の使い方もある。前置きとは本題に入る前に、言う言葉。例えば「すみませんが、~/ 申し訳ないんだけど、~」このように、話の切り出しに使われていることば。このとき、逆接の意味は全くない。何か話題を出す時に「～なんですが / ～なんだけど」を使って話し始めることが非常に多い。</li>
+<li>｢が｣と｢けど｣は、意味的にはほとんど置き換えが可能な言葉。｢が｣は少し改まった言い方でよく書き言葉にも使われる。｢けど｣は完全に話し言葉なので、会話で使う言葉。</li>
+<li>逆接や対比（だけ）の｢が｣は会話の中で男性的な言葉遣いになるので女性は注意。前置きはOKです。逆接・対比の時には女性は「けど」を使うようにしてください。</li>
+<li>｢けど｣と｢けれど｣の意味は同じ。｢けれども｣くだけて｢けれど/けど｣になった、普段の会話では｢けど｣をよく使う、｢けれども｣や｢けれど｣は仕事の時や目上の人と話す時などに使われることが多い。</li>
+</ul>
+<h3 id="ウチとソト"><a href="#ウチとソト" class="headerlink" title="ウチとソト"></a>ウチとソト</h3><ul>
+<li>会社内部の呼び方：社内では、同僚に対しては基本的には「さん」付け、上司に対しては役職でいうのが普通。</li>
+<li>自分にとって｢ウチ｣なのか｢ソト｣なのかによって敬語表現を変えなければならない。</li>
+<li>会社の場合、「社内」がウチ「社外」がソト。ソトの人と会話する時、ソトの人には敬意を示し、ウチには謙譲語を使わなければいけない。普段社長と話をする時は尊敬語を使う、ソトの人と話す時は、社長はウチの人になるから社長にも謙譲語を使う。この時｢山田課長｣、山田課長に敬意を払ってる｢山田課長｣ではなく、｢山田｣と呼ばなければいけない。名前の呼び捨ては言いにくいのなら、「課長の山田」のように役職を一緒に言うといいやすい。</li>
+</ul>
+<h3 id="｢～ものです」の使い方"><a href="#｢～ものです」の使い方" class="headerlink" title="｢～ものです」の使い方"></a>｢～ものです」の使い方</h3><ul>
+<li>｢～ものです｣には複数の意味があるが、よく使われるのが、｢Aは当然Bだ｣｢ふつう～だ｣。「ものです」は個人的な考えではなく、社会的にまた一般的な常識や、本来そうあるべきだと考えられること。一般的な常識を指すので、Aには特定のものや人物が入らない。Aには特定の人やものはこない。Aには、総称的な名詞などが入る。<ul>
+<li>「学生は勉強するものだ。」  ×山田君は勉強するものだ</li>
+<li>「人生は簡単にいかないものだ。」  ×彼の人生は簡単にいかないものだ</li>
+</ul>
+</li>
+<li>AはBものです　[Aは当然Bだ]<ul>
+<li>動詞の辞書形／い形容詞／な形容詞）＋ものです<ul>
+<li>例：「時間は大切にするものだ。」「助けてもらったときは、お礼を言うものだ。」</li>
+</ul>
+</li>
+<li>否定形（～ない＋ものです／～ものではありません）<ul>
+<li>例：「人生は簡単にいかないものです。」「他人の悪口を言うものではありません。」</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>～ものです[感動・詠嘆] ／～たいものです[願望]<ul>
+<li>心に強く感じたことや、驚いたことなどを感情を込めて伝える表現。<ul>
+<li>例：「時がたつのは早いものです。」「こんなにひどい環境で、よく我慢できるものだ。」「お金があったら、海外旅行をしたいものだ。」「30歳までに結婚したいものだ。」</li>
+</ul>
+</li>
+<li>感動した時や驚いた時に、終助詞的に後ろにつけて使う。<ul>
+<li>例：「時がたつのは早いものだ。」－＞ ｢本当に早い｣とそのことに対して深く感じていることを表す。</li>
+</ul>
+</li>
+<li>願望の｢～たいものです｣は、実現が難しいことへの願望を言う。</li>
+</ul>
+</li>
+<li>動詞のた形＋ものです[よく～した]（過去の回想を表す。）<ul>
+<li>例：「子供の頃、よく木に登って遊んだものです。」「生の頃は、毎日みんなで色々な話をしたもんだよな（ものだよな）」</li>
+<li>｢子供の頃、よく木に登って遊んだ｣とどう違う？それは事実をただ伝えているが｢～たものです｣を使う時は懐かしいと感じながら思い出している時に使う。例えば学生の頃は楽しかったな～と言いながら頭で、その頃のことを思い出しているような感じ。懐かしい友達と会った時の会話や昔の写真を見ている時などに、よく使われる。昔の思い出を語る時に使う表現なので、使うのは年配の人が多い。</li>
+</ul>
+</li>
+<li>「ものです」はくだけた会話の時には「の」を「ん」に変え、「もんです」になることが多い。</li>
+</ul>
+<h3 id="｢～にとって」「～に対して」"><a href="#｢～にとって」「～に対して」" class="headerlink" title="｢～にとって」「～に対して」"></a>｢～にとって」「～に対して」</h3><ul>
+<li>「～にとって：」：人、国家、組織などの名詞のあとに来るその立場からすると。<ul>
+<li>私にとって＝私の立場から考えると。日本人にとって＝日本人の立場から考えると。</li>
+<li>例：「これは私にとって、とても大切な宝物だ。」「日本人にとって、桜は特別な花です。」</li>
+</ul>
+</li>
+<li>「～に対して」：「～に対して」は立場ではなく、動作や感情を向ける対象を表す<ul>
+<li>私に対して＝私に。がんばった人に対して＝がんばった人に。</li>
+<li>例：「彼は私に対して、とても厳しい。」「この賞はがんばった人に対して送られるものです。」</li>
+</ul>
+</li>
+</ul>
+<h3 id="｢～ほうがいいでしょう」「～と思います」"><a href="#｢～ほうがいいでしょう」「～と思います」" class="headerlink" title="｢～ほうがいいでしょう」「～と思います」"></a>｢～ほうがいいでしょう」「～と思います」</h3><ul>
+<li>相手は取引先の部長→「ほうがいいと思います」を使おう。</li>
+<li>「でしょう」は少し強い表現。「そうするべきだ」と相手に言われている感じがするので、相手が自分より目下や友達なら問題ないが、それ以外にはあまり使わないほうがいい。<ul>
+<li>例：「断定する前に、しっかり調べたほうがいいでしょう。」</li>
+</ul>
+</li>
+<li>「思います」を使えば、「自分はこう思いますがあなたはどう思う?」と意見を伝えて相手に判断をしてもらうので柔らかいアドバイスの仕方になる、お客様、上司、目上の人には必ずこちらをつかおう。友達にもよく使う自分が自信や確信をもって言うとき以外は、やっぱり「思う」を使うことも多い。日本語は断定することが少ない。<ul>
+<li>例：「辛いものは食べ過ぎないほうがいいと思います。」</li>
+</ul>
+</li>
+</ul>
+<h3 id="他"><a href="#他" class="headerlink" title="他"></a>他</h3><ul>
+<li>｢今日から営業部で働きます」ー＞「今日から営業部でお世話になります」</li>
+<li>経理部：お金を使う部署、会計とか。日本での経理部は会計とかお給料の計算とか、お金にかかわる仕事をする部署、決して社長ではない。</li>
+</ul>
+<h2 id="03-懐かしい店"><a href="#03-懐かしい店" class="headerlink" title="03  懐かしい店"></a>03  懐かしい店</h2><h3 id="長く会っていなかった人への挨拶"><a href="#長く会っていなかった人への挨拶" class="headerlink" title="長く会っていなかった人への挨拶"></a>長く会っていなかった人への挨拶</h3><ul>
+<li>｢久しぶり｣が一番使いやすい、使う人も一番多い。｢お久しぶりです｣は相手の立場に関係なく、誰に対して使っても問題ない、友達にも仕事の人にも使う。</li>
+<li>｢ご無沙汰しています｣は長い間、訪ねていない・連絡していない。それに対して申し訳ないという意味も込められているので、へりくだった丁寧な表現、目上の人に使うことが多い。｢沙汰｣は｢便り｣という意味目上の人やお世話になった人にはまめに便りを出したり、ご挨拶に伺うのが礼儀だ、という考えがあるからだ。「無沙汰｣をしてすみませんという挨拶で、訪ねていなかったことをお詫びをしてる。現在はよほど親しい人やお世話になった人でない限り、実際は便りを出したりしない。相手との関係にもよるが、お客様や重要な相手には｢ご無沙汰しています｣を使ったほうがいい。｢お久しぶりです｣でも問題ないが、｢ご無沙汰しています｣の方が相手に敬意を払った、丁寧な挨拶だから、使い分けてみてください。</li>
+<li>｢しばらく｣は｢しばらくぶり｣の略で、上の人が下の人に、または同等の立場の人などに使われる。目上の人には決して使わないでください。</li>
+</ul>
+<p>「ー李さん、久しぶりですね。ーお久しぶりです。」<br>「（目下）：ご無沙汰（ぶさた）しています。（目上）：あっ、しばらく（ぶり）だね。」</p>
+<h3 id="伝言表現の使い方"><a href="#伝言表現の使い方" class="headerlink" title="伝言表現の使い方"></a>伝言表現の使い方</h3><ul>
+<li>｢～そうです｣は一般的によく使われる伝聞・伝言表現、仕事や友達との会話でも使う。この場合は「会いたいそうです」は不自然、｢会いたいと言っていました｣を使ったほうが自然。張さんが普段からその人の話をしたり、会いたがってる感じが伝わる。｢～そうです｣を使うと、張さんから会いたいと伝えてほしいと言われ、それを客観的に伝えただけという感じ。｢～そうです｣は間接引用なので、誰かの命令を伝えるとき、そのまま伝えることはできない。</li>
+<li>仕事のときによく使うのが｢～とのことです/ということです｣、どちらも直接的な引用という感じがあるので、前半部分には命令や推量などそのままのことばを伝えることができる。｢～と言っていました｣も同じように直接引用だが、第三者が言っていたことをただ伝えるだけの表現。｢～とのことです/ということです｣は伝言として誰かにきちんと報告するという意味が強い気がする。</li>
+<li>｢～って｣、友達同士の会話ではもっとくだけた表現が多い。ほかにも｢らしい｣｢みたい｣がある。とくに｢みたい｣は日常会話でよく使われる。｢みたい｣は不確実なことを相手に伝えるときに使う。日本人は曖昧表現が好きなので、本人から聞いた確実なことでも、｢みたい｣を使って伝える人も多い</li>
+</ul>
+<p>「陳さんは遅刻するそうです。」<br>「田中さんは午後から取引先に行くとのことです。」<br>「今日中に会議の資料を終わらせろということです。」<br>「その価格はちょっと難しいんじゃないかなとのことです。」<br>「光一君今日も遅刻するって。」<br>「楊さん飲み会行かないんだって。」<br>「ー楊さん明日の飲み会来るかな？ー来ないみたい。予定があるんだって。」</p>
+<h3 id="話題の転換"><a href="#話題の転換" class="headerlink" title="話題の転換"></a>話題の転換</h3><ul>
+<li>話の途中で、話題を変える時にも、決まったフレーズがある。｢ところで｣が一番使いやすいので、これを基本にして、あとは状況に応じて使ってみてください。これらをうまく使えるようになれば、会話がスムーズに進められるので、是非覚えて使ってください。</li>
+<li>｢ところで｣は話題の転換の代表的なもので、友達同士や仕事など。様々な会話で使われるし、文章でも今まで話していた話題と違う話をしたいときなどに使うもの。｢ところで｣はもっと広く、いろんな話題で使うことができる。</li>
+<li>｢話は変わりますが／話は飛びますが｣もよく使う、今までの話とは全然関係がないことを話すときだけ使う。</li>
+<li>話題の転換の｢さて｣は会議や仕事のとき、ニュースなどでもよく使われている。文章にもよく使われる（书信的寒暄问候后进入正题）。｢さて｣単なる話題転換だけでなく、それまでの話をまとめる形で何かを述べる文なので、前の話の内容を受けて｢さて、～｣のようにも使われる。</li>
+<li>｢そういえば｣｢それで｣などもよく使われる。｢そういえば｣：それまで話していたことと関連した（前面的话题联想到后项内容）、別の話題があるときに使われるもの。今は若い人の間では、前置きのように使う人もいるみたい。</li>
+</ul>
+<p>「ところで、最近調子はどうですか。」<br>「さて、次に何を勉強しましょうか。」<br>「あ、話は変わるけど、昨日の試合見た？」<br>「それで、昨日私達が帰った後、どうなったの？」<br>「ーここに水の入った紙コップと火があります。さて、質問です。ーこの紙コップの下から火を付けたらどうなりますか？」<br>「ー昨日の試合すごかったよね。ーうん。夜中なのに最後まで見ちゃったよ。あっそういえば、淳君結婚するんだって。」</p>
+<h3 id="「分かる」「知る」の使い形"><a href="#「分かる」「知る」の使い形" class="headerlink" title="「分かる」「知る」の使い形"></a>「分かる」「知る」の使い形</h3><ul>
+<li>知識や情報、記憶などを尋ねたり答えたりするとき。｢知る｣は必ずテイル形にしなければいけない。｢知る｣はテイル形の否定ができないので、否定の場合だけは｢知りません｣と答えなければいけない。</li>
+<li>｢分かる｣テイル形ではなく、｢わかります｣を使う場合が多い。｢分かっていますか?｣と聞かれると、相手から非難されたり責められたりしているような感じがしてしまう。このように｢わかりますか｣と聞かれて、もし｢分かっています｣と答えると、｢すでに理解しているんだから今更聞く必要はないよ｣、このように言われている気がするので、相手に不快感を与えることもある。｢わかりましたか｣と聞かれたらテイル形は使わないようにしてください。</li>
+<li>他にも｢分かる｣は、｢承知する・了解する｣の意味でも使われる。｢知る・分かる｣は、文脈によっては同じように用いることができる。</li>
+</ul>
+<p>「田中さんの連絡先を知っていますか。」<br>「この件は李さんに聞けば分かりますよ。」<br>「ー明日は早朝会議があるので、8時までに来てください。ー分かりました（＝承知しました）。」<br>「嵐というグループを知っていますか？ーはい、知っています。ーいいえ、知りません。」<br>「山田先生の電話番号を、知っていますか（=分かりますか）。」</p>
+<h3 id="｢思いつく」と「思い出す」"><a href="#｢思いつく」と「思い出す」" class="headerlink" title="｢思いつく」と「思い出す」"></a>｢思いつく」と「思い出す」</h3><ul>
+<li>思い出す：過去の記憶を心の中に思うこと。昔のことを考えた時や、忘れていた昔のことが頭に浮かんだ時、忘れている情報を知りたい時などに使う。</li>
+<li>思い付く：考えや思いが心に浮かぶこと。ある考えが心に浮かぶこと例えば、相談をしている時や何かいい方法を探している時や何か問題を解いているときなどその考え方や方法が頭に浮かんだときによく使う。｢思い付く｣には｢思い出す｣の意味もあると書いてあった、結果的に意味が重なるものもあるが、この二つは基本的は使い方が違うと思ってください。</li>
+<li>｢思い付く｣と｢考え付く｣は同じように使える。ただ、｢考え付く｣は時間をかけてきちんと考えた結果、考えが心に浮かぶときに使う。｢思い付く｣はそれだけではなくて考えてない状態で、急に心に浮かぶ場合にも使うことができる。</li>
+<li>数学の問題を解いている時：<ul>
+<li>①あっ思い出した！(忘れていた解き方を思い出した)</li>
+<li>②あっ思い付いた！(解き方が頭に浮かんだ、考え出した)</li>
+</ul>
+</li>
+</ul>
+<p>「彼の顔を見て、用事を思い出した。」<br>「斬新なアイデアを思い付いた。」<br>「ーどこに置いたか忘れちゃった。ーそのうち思い出すよ。」<br>「ー暇だね。何か面白いことない？ーあっ、いいこと思い付いた。」<br>「みんなで話し合い、とてもよい方法を考え付きました。」<br>「私は毎日、その日に思い付いたことをブログに書いています。」</p>
+<h3 id="省略"><a href="#省略" class="headerlink" title="省略"></a>省略</h3><ul>
+<li>間違ってるわけではないが、会話では省略をすることが非常に多いので、省略をしたほうがいい部分。例えば｢わたし｣｢あなた｣や｢が｣や｢に｣などの助詞など、前後の文脈から意味がはっきりしている、間違えることがない時にはほとんど日本語は省略される。特にくだけた会話では、使いすぎると逆に不自然になってしまうこともある。相手が言った内容と同じことだよね、だから言わなくてもわかる。勿論、省略しなくてもいい。ただ、同じ動詞を繰り返すと、確認や強調しているように聞こえることもあるので、短いほうがすっきりしてるから、省略することが多い。</li>
+<li>仕事のときも省略していい?はっきり意味が分かるときはいい。仕事ではミスがないように、仕事になれるまで、できるだけ、省略せずに確認するのがいいと思う。プライベートの会話ではどんどん省略してください。</li>
+</ul>
+<p>「ー剛君、今、彩ちゃんと付き合ってるらしいよ。ーえっ、彩ちゃんと？」<br>「ーお腹空いたから、何か食べに行こうよ。ー今から？」</p>
+<h3 id="自分を下の名前で言う"><a href="#自分を下の名前で言う" class="headerlink" title="自分を下の名前で言う"></a>自分を下の名前で言う</h3><ul>
+<li>たまに、この美香さんのように自分のことを下の名前で呼ぶ人がいる。</li>
+<li>家族や親しい友達の前ならいいかもしれないが、仕事のときにはNG。仕事のときに使うと、社会人として、ちょっとこの人、常識がないと思われる。子供は自分のことを名前で呼ぶ子が多い、下の名前で呼ぶと子供のままで大人になってない感じ。人によってはそのこと自体を嫌いという人もいる。とくに大人の女性には好まれない。</li>
+<li>初対面の人や目上の人などの前でもやめましょう。家族や恋人、仲のいい友達、この人たちの前だったらいいけど、それ以外には使わないほうがいい。恋人に甘えたり親に甘えたり、子供っぽさ、かわいさを出すためにはいいと思う。ただ、使う人や場面はきちんとわけなければいけない。１０代はいいけど、４０代、５０代になっても自分のことを｢美香はね～｣と言っていたらちょっとおかしい。とにかく使用場面を考えて使えばOK。自分を下の名前で呼ぶ時は、それに対して否定的な意見も多い。</li>
+</ul>
+<h2 id="04-ダイエット"><a href="#04-ダイエット" class="headerlink" title="04 ダイエット"></a>04 ダイエット</h2><h3 id="～ん（の）です／～なん（の）です"><a href="#～ん（の）です／～なん（の）です" class="headerlink" title="～ん（の）です／～なん（の）です"></a>～ん（の）です／～なん（の）です</h3><ul>
+<li>「んです、のです」はよく使う表現、必要な時に使えない、また、反対に使いすぎるなど、きちんと使うのは難しい。</li>
+<li>｢んです｣の基本的な意味と一緒に簡単に説明する：基本的な意味は事情説明。あることにたいして理由を説明すること、だから理由表現｢から・ので｣のかわりとしてもよく使われている。｢んです｣と｢のです｣は同じだが、会話のときは｢んです｣の方がよく使われる。｢のです｣は硬い感じがするので、ビジネスや公式の場で良く使われている。<ul>
+<li>自己紹介のときに普通「んです」は使わない</li>
+<li>状況説明を求めている、｢理由｣を求めているので｢んです｣を使う</li>
+<li>使いすぎはよくない。理由を説明するとき、いいすぎると、主張が強い表現になったり、言い訳に聞こえるから</li>
+<li>｢んです｣は相手を問いただす、つまり、少し責めながら不審なことを明らかにするような使い方もある、この時、イントネーションは強くなる</li>
+<li>もし｢んです｣をつけると、感情がとても入った表現になるので、もし写真をみながらその人について、詳しく感情を込めて話したい時は｢んです｣を入れる</li>
+<li>つまり感情を込めて話す時は入れたほうがいいけど、ただ事実などを話すときは入れないほうがいい</li>
+</ul>
+</li>
+<li>「んです」は前置きや話題の転換にも使われる：「～なんですが / ～なんだけど / ～なのですが」、このように新しい話題を出すときにもこの3つはよく使う便利なことば。「んです・のです」は、自然な日本語を話すとき、とても大切な表現。</li>
+</ul>
+<p>「ーその洋服どこで買ったんですか。かわいいですね。ーこれはタイに行ったときに買ったんです。」<br>「今、電車が止まっているんで、少し遅れると思います。(電話)」<br>「あっ、明日の試験なんですが、教室が変更になりました。」</p>
+<h3 id="終助詞ね"><a href="#終助詞ね" class="headerlink" title="終助詞ね"></a>終助詞ね</h3><ul>
+<li>終助詞の使い方は男性や女性によって少し違うが、最近では昔ほど差はなくなっているような気がする。</li>
+<li>終助詞｢ね｣の基本的な意味は、共感、同意そして確認。でも、それ以外の不自然な場面で使っている人が多い。</li>
+<li>終助詞｢よ｣の基本的な意味は相手に何かを知らせたり、注意したりすること。</li>
+<li>｢ね｣ではなく｢ねえ｣と発音している。｢ね｣を｢ねえ｣と長く伸ばすと｢質問・確認・疑念などの意味を強める｣効果がある。｢感動を表す｣ときにも｢ねえ｣と伸ばすことが多い、その時はイントネーションは下降気味になる。｢ね｣にするか、｢ねえ｣にするかで、ちょっと意味が変わってくるので、これにも注意が必要。</li>
+</ul>
+<p>「ここの景色、とてもきれいですねえ。（感動）」<br>「明日の集合時間は９時ですね。（確認）」<br>「今日のデートとっても楽しかったね。（共感・同意）」</p>
+<h3 id="実に／実は／本当に"><a href="#実に／実は／本当に" class="headerlink" title="実に／実は／本当に"></a>実に／実は／本当に</h3><ul>
+<li>｢実に｣は何かの程度が高いことを確認したり、心からそう思ったり感じた時に使うことば。</li>
+<li>｢実は｣は何かを正直に話す時に使うもの。</li>
+<li>｢実に｣と｢本当に｣は違いはある？この二つの使い方はほぼ同じ、ただ、｢本当に｣の方が会話的日常会話によく使われている。くだけた会話では｢本当に｣→｢ほんとに｣と｢う｣を発音しないことが多い。「実に」は仕事のときに使う事が多く、友達同士や普段の会話では「本当に」の方がよく使われている。</li>
+<li>そのほかにも、同じように｢誠に｣という表現もあるが、これはわりと文章的で、公的な場面で使うことが多い。</li>
+</ul>
+<p>「彼は実にいい青年ですね。」<br>「この絵画、実に見事な作品ですね。」<br>「あの話、実は全部嘘なんです。」<br>「実は、今度結婚することになりました。」<br>「今年の冬は本当に寒い。」</p>
+<h3 id="意味が分からないときに尋ねる表現"><a href="#意味が分からないときに尋ねる表現" class="headerlink" title="意味が分からないときに尋ねる表現"></a>意味が分からないときに尋ねる表現</h3><ul>
+<li>相手が言ったことの意味が分からない時や、もっと具体的なことを知りたい時など、｢どんな～/どういう～｣という表現を使って聞く。どちらを使ってもいい場合は多い。後ろにくる名詞が｢意味・わけ・つもり｣このような言葉がくる時、｢どんな｣は使えないので。</li>
+<li>｢どんな｣：性質や状態、系統などを尋ねる疑問文。｢どういう｣：もっと詳しい具体的な内容を尋ねるときに使う。</li>
+</ul>
+<p>「A: 　山田さん、今日デートらしいですよ。<br>B:　へー、山田さんの彼って、どんな人ですか。<br>A:　背が高くて、かっこいいですよ。でも、少し変わった人です。<br>B:　えっ、どういう人なんですか。<br>A:　かなりのアニメオタクです。」<br>「ーさっきの部長の言葉、どういう意味ですか。ー「しっかり仕事しろ」って意味ですよ。」</p>
+<h3 id="～じゃないですか"><a href="#～じゃないですか" class="headerlink" title="～じゃないですか"></a>～じゃないですか</h3><ul>
+<li>～じゃないですか＝ではないですか（否定疑問文）</li>
+<li>「じゃないですか」は「ではないですか」の会話ことばいくつか意味があるが、この相手の間違いなどを指摘する否定疑問文では、使うちょっと注意が必要。否定を表す、強い表現になる。</li>
+<li>否定疑問の「~じゃないですか」は相手を非難する用法もあるので、場合によっては相手を怒らせてしまうこともあるあまり目上のひとには使わないほうがいい。この表現はただ間違いを指摘するだけじゃなく、非難していると思われてしまうことが多い。</li>
+</ul>
+<p>「もう謝ったじゃないですか。」<br>「だから、言ったじゃないですか。」<br>「これ、本物じゃないですか。」</p>
+<h3 id="気になる／気にする／気に入る／気を使う"><a href="#気になる／気にする／気に入る／気を使う" class="headerlink" title="気になる／気にする／気に入る／気を使う"></a>気になる／気にする／気に入る／気を使う</h3><ul>
+<li>｢～が気になる｣は自動詞で、｢～を気にする｣は他動詞。大きくいうと、｢気にする｣は自分の意志で心配したり、気にかけたり、関心を向けていること、一方｢気になる｣は自分ではコントロールすることができない。｢試験の結果を気にするな｣とは言えるけど、｢気になるな｣と命令形で言うことはできない。</li>
+<li>気を使う：相手のことを気にして、色々すること（费心，为对方花费心思）。気に入る：好きになること。気を付ける：注意すること。</li>
+<li>気を抜く：例えば、試験が終わるまで、気を抜かずに頑張りましょうなど、頑張っていたり、緊張していた状態から、それを緩めたり、油断したりすること。</li>
+</ul>
+<p>「なぜだか分からないけど、大野君のことが気になる。」<br>「早く寝たいのに、明日のテストが気になって、眠れません。」<br>「彼の言ったことは気にするな。」<br>「彼女は外見ばかり気にしている。」</p>
+<h3 id="～っけ／～だっけ"><a href="#～っけ／～だっけ" class="headerlink" title="～っけ／～だっけ"></a>～っけ／～だっけ</h3><ul>
+<li>意味は主に確認。前に聞いたことやはっきりしないことを相手に確認する時に使う。</li>
+<li>また、この表現は独り言のときにも良く使う。昔のことを思い返したり、何かを思い出そうとするとき、自問するときなど、例えば、写真を見ながら、｢あ～よくここに行ったっけ｣とか、｢あれ？この単語なんて読むんだっけ？｣このように自問の時によく使う。</li>
+<li>とても軽い話し言葉なので、親しい人の間で使ってください。仕事のときでも関係のいい人には使ってもいいと思う。</li>
+</ul>
+<p>「今日の合コン、佐々木さん来るっけ？」<br>「あの先生の名前、何だっけ？」<br>「A：この曲、昔よく聞いたよね。B：えっ、そうだったっけ？」<br>（動た＋っけ／名・ナ形＋だ＋（った）＋っけ／イ形＋かったっけ／～んだ＋（った）＋っけ）</p>
+<h3 id="なるほど"><a href="#なるほど" class="headerlink" title="なるほど"></a>なるほど</h3><ul>
+<li>｢なるほど＋です｣は間違い、｢なるほど｣は｢副詞・感嘆詞｣なので、｢です｣はくっつきない。｢なるほど。そうですね。｣ 短縮しないでください。今の若い人の中にも使う人が大勢いるが、正しい表現ではないので、やめましょう。</li>
+<li>友達同士で使うのは全く問題ないが、仕事の時は使う時に注意必要。相手の意見や説明などに対して、正しいと納得する時に使う。この言葉は、目上の人にはあまり使わない方がいい言葉。勿論、目上の人でも、全て失礼になるわけではない。しかし、相手のことばを正しいと判断して納得する→これって、相手の意見を評価する、ということにもなる。日本では、目上の人に対して直接的に評価をすることは、失礼になることが多い。場合にもよるが、｢そうでしたか｣｢よくわかりました｣など、このように同意とか感謝を示すことばに変えるといい。</li>
+</ul>
+<p>「なるほど、その説明でやっと理解できました。」<br>「A：これが、コンクールで優勝した田中さんの絵です。B：なるほど。素晴らしい作品ですね。」<br>「A：この方法だと、簡単にできますよ。B：なるほど。そうですね。」</p>
+]]></content>
+      <categories>
+        <category>日本語</category>
+      </categories>
+      <tags>
+        <tag>日本語</tag>
+        <tag>文法</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>中级日语会话 学习笔记 05-08</title>
+    <url>/2020/07/21/%E4%B8%AD%E7%BA%A7%E6%97%A5%E8%AF%AD%E4%BC%9A%E8%AF%9D-%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B005-08/</url>
+    <content><![CDATA[<h2 id="05-上司との打合せ（提案）"><a href="#05-上司との打合せ（提案）" class="headerlink" title="05  上司との打合せ（提案）"></a>05  上司との打合せ（提案）</h2><h3 id="てはいかがですか／てはいかがでしょうか／てはどうですか"><a href="#てはいかがですか／てはいかがでしょうか／てはどうですか" class="headerlink" title="てはいかがですか／てはいかがでしょうか／てはどうですか"></a>てはいかがですか／てはいかがでしょうか／てはどうですか</h3><ul>
+<li>提案をするときの表現はいくつかあるが、相手が誰かによって、言い方は変えたほうがいい。確かに｢いかがですか｣その部分は丁寧、でも｢～したらどうですか｣この表現自体が、ちょっと上からの目線で言ってるように感じてしまうので、目上の人に対しては失礼になる。一番いいのは｢～てはいかがでしょうか｣提案をするとき、特に相手が目上の人の場合は、疑問形にしたほうがいい。疑問形にすることで、相手に自分の意見を押し付けずに伝えることができる。（たらどう／たらいかがですか带有斥责对方的语气，最好用てはいかがでしょうか）</li>
+<li>相手が友達や後輩だったら、とくに気を遣う必要はない。この｢言ったらどう｣は｢そろそろ言いなさい｣とほぼ同じような表現になってしまう。</li>
+<li>提案は押し付けになってはいけないので、仕事で使う時、とくに疑問文にして、丁寧な表現を使ってください</li>
+</ul>
+<p>「ここで食事をしてから帰られてはいかがでしょうか。」<br>「今度の発表会は野外で行なってはどうでしょうか。」<br>「黙ってないで、そろそろ言ったらどう？」</p>
+<a id="more"></a>
+<h3 id="ましょう"><a href="#ましょう" class="headerlink" title="ましょう"></a>ましょう</h3><ul>
+<li>｢～ましょう｣はとても基本的な誘いかけの表現。でも、この場合は ｢ましょう｣は使わないほうがいい。この場合も、｢やってみませんか｣と疑問形にする。それを、さっきのように丁寧な表現にして、｢やってみてはいかがでしょうか｣とすると完璧。</li>
+<li>初めて誘う時は｢～ませんか｣を使う。それに対する答えが｢～ましょう｣。</li>
+<li>とても関係がいい人や、きっと相手もそう思ってるだろう、こういうときは使う事もある。あまり親しくない人や、相手がどう思っているか分からない時は｢～ませんか｣を使ってください。</li>
+<li>｢ちょっと、用事があるんで…｣｢ちょっと…｣や｢都合が悪いんで…｣など、今のように省略した形で伝えるといい。日本人はあまりはっきり断らない。相手を傷付けないように、はっきり言わないでこのように省略する事が多い。これで断れない時ははっきり言う。</li>
+</ul>
+<p>「ー南さん、今日は楽しかったですね。今度はみんなでじゃなく、二人で会いませんか。ー二人ですか。いいですよ。二人で会いましょう。」<br>「A：お疲れ様です。今から少し飲みに行きませんか。B：ん～今日はちょっと…。A：１時間だけ、行きましょうよ！B：う～ん。また今度にします。」</p>
+<h3 id="それで／それから／さらに"><a href="#それで／それから／さらに" class="headerlink" title="それで／それから／さらに"></a>それで／それから／さらに</h3><ul>
+<li>｢それで｣は前の文で言ったことが原因・理由となって、後ろの状況になったと言うときに使う。｢それから｣には原因を表すような用法はない。</li>
+<li>「それから」は例文④のように、前の事に続いて後ろの事が起こる順接。例文⑤のように物事を、後から付け加える時にもよく「それから」を使う。</li>
+<li>「それで」には他の用法もある。これは会話でよく使うもの。例文②では相手に、さらに話をするよう、すすめる表現として使っている。相手の話を続けさせたり、話を自分が続けたりするときに使う「それで」。③のように｢で｣にも言い換えられる。相手に話を続けてほしいとき｢で｣だけでいい、自分の話を続けたい時にも同じように使う。</li>
+<li>｢さらに｣も内容を加える時に使う。｢さらに｣は、以前の状態よりも何かが増えることを表す。この｢さらに｣も内容などを追加するときに使うが、｢さらに｣には以前よりも程度が高くなる用法もあるので、｢さらに｣を使うことで、｢得をする｣という感じが増す。</li>
+</ul>
+<p>「彼女が病気で来られなくなりました。それで、代わりに来ました。」（彼彼女が来られなくなった。その理由で自分が来たという意味になり、この場合｢そのために｣という意味になる。）<br>「ー実は今月末で会社を辞めるんです。ー本当に。それで、これからどうするの？」<br>「ーそこで、突然先生が教室に入ってきたんですよ。ーで？そのあとは？」<br>「手を洗って、それからご飯を食べなさい。」<br>「次の休みには四川に行きます。それから、西安と広州にもいく予定です。」（四川に行き、そのあとに西安と広州に行くということをただ事実を伝えている文）<br>「次の休みには四川に行きます。さらに、西安と広州にもいく予定なんです。」→感情（｢さらに｣があるので、｢四川だけじゃなく、西安と広州もいくんですよ。いいでしょう！｣このような気持ちもその中に感じることができる）<br>「今購入すると、さらに、この便利グッズも差し上げます。」</p>
+<h3 id="すると"><a href="#すると" class="headerlink" title="すると"></a>すると</h3><ul>
+<li>他の人の意見を受けての発言なので、｢すると｣を使うことができる。｢すると｣は前の文がきっかけとなって、続いて後ろが起こる、こういうときに使う接続詞。前の事柄や発言から判断した結果を表す時にも｢すると｣を使う。</li>
+<li>友達とも使う？使うよ。ただ、くだけた会話では｢それじゃ｣の方がよく使われている。ぜひ仕事とくだけたときと、使い分けてください。</li>
+</ul>
+<p>「プレゼントの箱を開けた。すると、中からきれいな指輪が現れた。」<br>「A：計画書は金曜日までに出してください。B：すると、今日から始めないと間に合いませんね。」<br>「A：昨日は風邪を引いたので、家で寝ていました。B：すると、ずっと家にいたわけですね。」</p>
+<h3 id="が／しかし／けれども／でも"><a href="#が／しかし／けれども／でも" class="headerlink" title="が／しかし／けれども／でも"></a>が／しかし／けれども／でも</h3><ul>
+<li>日本語には逆接の接続詞がたくさんある。その中でも｢が、しかし、けれども、でも｣がよく使われる。意味的な違いはほとんどないが、使い方には多少の差がある。一番会話的なのが｢でも｣。話し言葉なので文章には使わない。次に会話的なのが｢けれども｣くだけた言い方だと｢けど｣がよく使われる。｢しかし、が｣は文章的な表現。とくに｢が｣は会話で使われることは少ない。仕事の時には｢しかし｣を使う事が多い。</li>
+<li>よく会話で使われるのはこの接続詞ではなく、接続助詞として使う。｢が、けれど｣はこのように接続助詞として使うことが多い。接続詞の｢が｣は会話で余り使わないが、接続助詞の｢が｣は会話でよく使う。その時、動詞の形には注意が必要。｢が｣は丁寧形に接続することが多いが、普通形に接続した場合、男性的な表現になり、女性はあまり使わない。<ul>
+<li>「約束の時間を電話で伝えたが、彼は来なかった。」</li>
+<li>「約束の時間を電話で伝えましたが、彼は来ませんでした。」（女性は接続助詞の「が」を使うときは前の形は丁寧形を使ってください。）</li>
+</ul>
+</li>
+<li>｢けれども｣はとくに制約はない。ただ、｢けれども｣の前は丁寧形よりは、普通形の方が言いやすいし、自然に聞こえる事が多い。｢～しましたけれども｣ってちょっと言いにくい。<ul>
+<li>約束の時間を電話で伝えたけれども、彼は来なかった。</li>
+</ul>
+</li>
+<li>どちらでもいいのですが、丁寧形のときは｢が｣すっきりしていて自然になる。逆接の接続語は意味に大きな違いはないが、どれを使うかで、丁寧さやくだけた感じ、男女差などを表す事ができる。</li>
+</ul>
+<p>「風邪を引いて熱がある。でも、会社に行かなければならない。」<br>「彼女にメールをした。しかし、返事は来なかった。」<br>「張ったけれども、失敗してしまった。」</p>
+<h3 id="～（ら）れるように／しなければいけない／しなければならない"><a href="#～（ら）れるように／しなければいけない／しなければならない" class="headerlink" title="～（ら）れるように／しなければいけない／しなければならない"></a>～（ら）れるように／しなければいけない／しなければならない</h3><ul>
+<li>縮約形：～ておく → ～とく／～なければ → ～なくちゃ／なきゃ。｢しておかなければ｣はちょっと長いのでいいにくい、｢しとかなくちゃ｣と短くして使うことが多い、｢しとかなきゃ｣という言い方もある。やっぱりそのままだと長くて言いにくいので、ほとんどの人が縮約形を使っている。仕事の時も使える？準備の｢ておく｣は縮約形にしても問題ないが、義務の｢なければならない｣はあまり縮約形にしないほうがいい。仲のいい人同士だったらいいけど。</li>
+<li>｢なければならない｣と｢なければいけない｣って、違いある？特に意味的な違いはないけど｢なければならない｣のほうがより丁寧な表現。会話の時は、ほとんど｢なければいけない｣のほうを使う｢ならない｣はちょっと文章的。</li>
+</ul>
+<p>「何を聞かれても、答えられるようにしなければならない。」<br>「日本に留学する前に、日常会話を話せるようにしておかなければいけない。」<br>「来週までに企画書を出せるようにしとかなくちゃいけない。」</p>
+<h2 id="06-店でのクレーム（抗議）"><a href="#06-店でのクレーム（抗議）" class="headerlink" title="06  店でのクレーム（抗議）"></a>06  店でのクレーム（抗議）</h2><h3 id="抗議する時の流れ"><a href="#抗議する時の流れ" class="headerlink" title="抗議する時の流れ"></a>抗議する時の流れ</h3><ul>
+<li>最初にクレームを言うときは、文句を言うよりも、一般的に柔らかい表現で伝えることが多い。怒りの程度によっても違うが、まずは、婉曲的に状況を伝える。急に怒っても、相手は状況が分からない。状況がわからないとちゃんとした対応ができない。つまり、こっちはもっといらいらすることになる。まずは冷静に状況を伝えてる。その時によく使う「～が／～けど」などの表現、これは後ろに省略して、簡単に状況を伝えてる。そして、相手の反応を待つもの。口調を変えれば、怒っていることも伝わる。強めに言うと、とても怒っているように感じる。でも、婉曲に状況を伝えたけど、ちゃんとした返事がもらえなかったり、納得できないときは、もう一度、今度は、それによってこんな被害を受けたということを伝えてください。</li>
+<li>「～のです／～んです」は自分にかかった迷惑を相手に伝えるときによく使う。ダメな時はもっと感情を出してもいい。「一体どうなっているんですか」「早くしてもらえませんか」「何とかしてもらえませんか」「責任者を呼んでもらえませんか」。</li>
+<li>クレームの時も、それまで通りの「です／ます」。この丁寧形を使ってください。敬語を使って丁寧にする必要はないが、急に乱暴な言葉になるのはよくない。</li>
+</ul>
+<p>「すみません、まだ料理が来ないんですが…」<br>「言われた通りにやっているのに、何度やっても映らないんです。」<br>「これ、私の希望と違うんですが…」</p>
+<h3 id="文末の「が／けど」"><a href="#文末の「が／けど」" class="headerlink" title="文末の「が／けど」"></a>文末の「が／けど」</h3><ul>
+<li>クレームをまず最初に伝えるときによく使う「けど／が」。このように、日本人は後半を省略することが多い。言葉が省略されていても、その場の状況や相手との関係を考えて、話をしている人が一体何を考えているのかを察しながら話を続ける。なにが言いたいのかを読み取るために、日本の文化や日本の言葉の使い方などを理解する必要がある。</li>
+</ul>
+<p>「あの、ちょっとお願いがあるんだけど…」　依頼のときに使う前置き表現。言いにくいお願いの時は特に、前置きをつけて、相手に心の準備をさせてからお願いする。<br>「すみません、もう30分待ってるんですが…」　<br>「A：絶対に無理なんですか。B：絶対とは言いませんが…」　可能性はほぼない。婉曲。</p>
+<h3 id="なんて／なんか"><a href="#なんて／なんか" class="headerlink" title="なんて／なんか"></a>なんて／なんか</h3><ul>
+<li>｢なんて」は基本的に軽視や大切でないなどの気持ちを伴うことがおおい言葉。それ以外にも、例として挙げたり、予想外の気持ちを表したり、感嘆の気持ちを表したり、さまざまな用法がある。「なんて」とよく間違って使われるのが「なんか」、これも同じように軽視を表すので、間違って使われることも多い。二つには用法の違いがたくさんあるが、両方とも、対象を軽視したり、自分を謙遜したりするときに使う。その場合、二つの意味的には、ほとんど言い換えることが可能。</li>
+<li>でも、前にくる言葉との接続のしかたは違いがある。前が名詞の時はどっちも使えるが、動詞や形容詞が来るときは「なんか」を使うことができない。感嘆や予想外などを表すときは、「なんか」に言い換えることはできない。あと、「なんて」より「なんか」のほうがよりくだけた話し言葉。「なんか」のほうが感情が強いと感じる人が多い。</li>
+</ul>
+<p>「こんなつまらない仕事なんて二度としたくない。　〇なんか」<br>「わたしなんてつまらない人間だし、ぜんぜんだめだ。　〇なんか」<br>「田中さんが、結婚したなんて信じられない。　×なんか」<br>「なんて素敵な人なんだろう。　×なんか」</p>
+<h3 id="よろしければ／よかったら"><a href="#よろしければ／よかったら" class="headerlink" title="よろしければ／よかったら"></a>よろしければ／よかったら</h3><ul>
+<li>本来、相手に対して何かを申し出るときに、押し付けにならないように使われる言葉。「よかったら、食べていませんか」お店でもよく使われる言葉。</li>
+<li>今のように、お願いの時に「よかったら」を使う人が多い。この時の「もしよかったら」＝それが嫌でなければ／気が向くなら、などの前置き表現のようなもの。なので、面倒なことだったら、断ってくれてもいいよ、という意味で使っているのだ。</li>
+<li>断ってもいいですよと相手に判断を任せる表現。でも、相手が仲いい友達の場合は、これちょっと気を使っている感じもするので、あまり使わないかも。余り親しくない人や他人、仕事の時の相手などには、使ったほうがいい。</li>
+<li>「よかったら」は会話で使う、「もし～したら」が使われているので、やや気軽な感じがする。お客様などに丁寧に伝えるときは「もし～ば」のように、「よろしければ」を使ってください。もしは入れても入れなくても同じ</li>
+</ul>
+<p>「よろしければ、お荷物をお持ちいたしましょうか。」<br>「よかったら、もう一杯いかがですか。」<br>「もしよかったら、週末家に遊びに来ませんか。」</p>
+<h3 id="てある／ている／ておく"><a href="#てある／ている／ておく" class="headerlink" title="てある／ている／ておく"></a>てある／ている／ておく</h3><ul>
+<li>「てある」「ている」：変化の結果の状態を表しているが、基本的に「ている」は自動詞、「てある」は他動詞が前に入る。</li>
+<li>「ている」は自然な変化、だれがやったかわからない行為。「てある」は目的がある意図的な変化を表す。「ておく」は事前の準備と放置を表す。</li>
+<li>「ておく」と「てある」どちらも「前もって」という意味を持つので、どちらを使っても同じ意味になることがある。「ておく」は前もって行う動作に重点が置かれている。「てある」は変化した結果の状態に重点が置かれている。</li>
+<li>「今日の誕生日パーティーのために、ケーキを頼んでおきました。」動作の重点が置かれている、誕生日のために、私が事前にちゃんと頼んだよということ。使うほうが自分が前もって準備したのだ。アピールしてるようにも聞こえる。</li>
+<li>「今日の誕生日パーティーのために、ケーキを頼んである。」ケーキは頼んだ状態にある、ということに重点が置かれている。誰が頼んだのかはわからないが、ケーキは準備してあるよということ。準備してあることだけ伝わればいい。ちょっと控えめで、日本人的な表現。</li>
+<li>「ておく」は会話の時縮約形がよくつかわれる、くだけた会話ではほとんどが縮約形。「見ておくー見とく」「ておこうーみとこう」「みておいたーみといた」「しておいてください」「しといてください」</li>
+</ul>
+<p>「会議室の鍵を開けようとしたら、すでに開けてありました。」<br>「パソコンの電源が消えているので、つけてください。」<br>「来週までに資料を集めておいてください。」</p>
+<h3 id="ばかり／だけ"><a href="#ばかり／だけ" class="headerlink" title="ばかり／だけ"></a>ばかり／だけ</h3><ul>
+<li>「ばかり」は一つの動作を繰り返し行うという意味があるので、３ではあそびだけしかしないのではなく、遊ぶという動作をよくしているといる意味。「だけ」を使うと、遊び以外何もしていないということになる。「ばかり」にはちょっと非難をするような、あまりよくないという意味が含まれることがある。「だけ」にはこの使い方はない。</li>
+</ul>
+<p>「このクラスは日本人ばかりだ。〇だけ　↓全部が」<br>「彼女は文句を言うばかりで何もしない。〇だけ」<br>「家の息子は勉強しないで、遊んでばかりいる。×だけ」</p>
+<h3 id="助詞に／で"><a href="#助詞に／で" class="headerlink" title="助詞に／で"></a>助詞に／で</h3><ul>
+<li>「場所を表す名詞＋に」＝存在場所、所在地を表す。「場所を表す名詞＋に＋移動動詞」＝目的地を表す。「に」は一般的に、動作を行う人や対象の存在場所を表す。「で」は一般的に行為が行われる場所や範囲を表す。たまに同じ。</li>
+<li>「シャンハイにマンションを買いました」には存在場所を表す。マンションがある場所がシャンハイ、買った場所は分からない、日本にいて、ネットで買ったかも。</li>
+<li>「シャンハイでマンションを買いました」には動作が行われた場所がシャンハイ、買うという行為を行ったのがシャンハイ。日本にあるマンションをシャンハイで買うかも。</li>
+</ul>
+<p>「庭に桜の木を植えました。」　存在場所、所在地を表す。<br>「公園にキャッチボールをしに行きます。」目的地を表す。<br>「家で復習しなければならない。」行為が行われる場所や範囲を表す。</p>
+<h2 id="07-予約"><a href="#07-予約" class="headerlink" title="07  予約"></a>07  予約</h2><h3 id="予約する時の流れ"><a href="#予約する時の流れ" class="headerlink" title="予約する時の流れ"></a>予約する時の流れ</h3><ul>
+<li>最初に予約をしたいということを伝える、それから希望の日時、人数を言い、その時が空いているかを聞く。通常予約を受ける人は、間違いがないように、もう一度日時と人数を確認して、名前や電話番号を聞く。</li>
+</ul>
+<p>「予約したいんですが」<br>「すみません、予約をお願いしたいんですが」<br>「予約をお願いします」<br>「明日の六時、三人なんですが、空いていますか。」<br>「申し訳ございませんが、その日はいっぱいでして…」</p>
+<h3 id="ちょっとした"><a href="#ちょっとした" class="headerlink" title="ちょっとした"></a>ちょっとした</h3><ul>
+<li>少しのこと、逆説的に「かなりの、相当の」という意味で使うこともある。逆説的な意味で使うときは、はっきりとは言いにくい時や控えめに言うとき、あいまいに言うときなどによく使われる。ただ、会話の中で使われるときは、その前後のつながりを考えると、どちらかわかることがほとんど。</li>
+</ul>
+<p>「ちょっとしたことで、彼とけんかしてしまった。」＝少し<br>「最近、ちょっとした金が入ったから、今日は奢るよ。」＝かなり、相当<br>「このアニメは、マニアの間でちょっとしたブームになっている。」＝かなり、相当</p>
+<h3 id="そうですか／そうなんですか／そうなんですね"><a href="#そうですか／そうなんですか／そうなんですね" class="headerlink" title="そうですか／そうなんですか／そうなんですね"></a>そうですか／そうなんですか／そうなんですね</h3><ul>
+<li>｢そうなんですね」最近よく聞く言葉特に若い女性の中でよく使われているみたい。まちがいではないが、聞きなれないので違和感を感じるという人は多い。ちょっと親しみを込める意味で使われている。ただこの言葉を苦手という人もいるので、使い過ぎはやめたほうがいい。</li>
+<li>「そうなんですか」は知らない新しい情報を聞いたときに、少し驚いたときに使うことが多い。「そうですか」は相手の発言を理解したり納得したときによく使う、驚いたり感情がこもったりというニュアンスはない。</li>
+</ul>
+<p>「実は、新しい彼女ができたんだ。－そうなんだ。」<br>「今度の休みに北京に行こうと思っているんです。－そうですか。」</p>
+<h3 id="結構です／大丈夫です"><a href="#結構です／大丈夫です" class="headerlink" title="結構です／大丈夫です"></a>結構です／大丈夫です</h3><ul>
+<li>結構は意味がいくつかある、（肯定）この場合は「はい、お願いします」「はい、結構です、お願いします」など、相手にはっきりわかるように伝える必要がある。断る場合も、「いいえ、結構です、また今度」など、ほかの言葉をつけ加えよう。「結構です」は受けるときよりも、断るときのほうがよくつかわれている気がする。</li>
+<li>「結構」よりも、この「大丈夫」のほうがより紛（まぎ）らわしいので、とくに注意。「結構です」はちょっと強い印象を受けるので、いまはもっとやわらかく断るために「大丈夫です」を使う人が多い。特に若い人たち。肯定の時「平気です」</li>
+<li>相手に言われたときは、必ずどちらの意味なのかを確かめてください。</li>
+</ul>
+<p>「この計画をこのまま進めてもよろしいでしょうか。－はい、結構です（肯定）」<br>「もう一杯いかがですか。－いえ、たくさん飲みましたので、もう結構です。（断る）」<br>「結構なお住まいですね。」</p>
+<h3 id="目的の「～よう」"><a href="#目的の「～よう」" class="headerlink" title="目的の「～よう」"></a>目的の「～よう」</h3><ul>
+<li>「ように」はいくつ意味がある、この場合、前にくる動詞は一般的に無意志動詞の辞書形かない形になる。「ために」は前に意志動詞が来る。それに、どちらも目的を表すが、「ように」に比べて、「ために」は意識的に目的を達成するために行動したり、考えたりするので、より強い意志を表す。可能形＋ように</li>
+<li>会話の時には「に」をつけることが多い、やわらかくなる。文章では「に」をつけないことが多い、特に正式な書類や論文などでは、「に」をつけないことが多い。</li>
+</ul>
+<p>「今度の試験、合格できるよう（に）頑張ります。」<br>「病気にならないよう（に）、健康管理をちゃんとしてください。」<br>「みんなに応援してもらえるよう（に）、頑張っていきましょう。」<br>「私にもわかるように」</p>
+<h3 id="とんでもないです／とんでもありません"><a href="#とんでもないです／とんでもありません" class="headerlink" title="とんでもないです／とんでもありません"></a>とんでもないです／とんでもありません</h3><ul>
+<li>「とんでもない」の「ない」は「みっともない」「もったいない」などと同じ、これで一つの言葉とされている形容詞です。「ございません」「ありません」は違う。正しい言い方は「とんでもないことです」「とんでもないです」「とんでもないことでございます」</li>
+<li>ただ「とんでもありません／ございません」は最近では慣用表現の一つとして、一般的に広くつかわれているので間違いではなくなってきた。年齢が高いひとはそう考える人が多いようだ。若い人たちは使う。</li>
+</ul>
+<p>「今日はありがとうございました。これはお礼です。－お礼なんて、とんでもないです、気持ちだけで充分ですよ。」<br>「今度のプロジェクト、田中さんにリーダーをお願いしたいんですが。－とんでもない、私ではなく、山田さんがなるべきです。」</p>
+<h2 id="08-中国と日本に文化の違い（仕事）"><a href="#08-中国と日本に文化の違い（仕事）" class="headerlink" title="08  中国と日本に文化の違い（仕事）"></a>08  中国と日本に文化の違い（仕事）</h2><h3 id="そうそう"><a href="#そうそう" class="headerlink" title="そうそう"></a>そうそう</h3><ul>
+<li>ちょっと突然話の転換の「そうそう」や「そういえば」を入れたほうがいい。「そうそう」は話し言葉でよく使われる。何かを思い出したり、新しい情報を相手に伝えるときによく使う、この使い方は「そういえば」と同じ、さいしょに「あっ」をつけることも多い。「そうそう、そういえば」両方使うこともある。</li>
+<li>ほかにも、相手の言葉に同意するときにもよく使う。気軽な返事になってしまうので、友達や仲がいい人と。友達以外には「そうです」「はい、そうです」丁寧形を使ってください。</li>
+</ul>
+<p>「そろそろ帰りましょうか。－そうそう、社長が呼んでましたよ。」<br>「トラブルがあったから、今日残業しなきゃいけないんだって？－そうそう、そうなんだよ。」</p>
+<h3 id="うーん／ええと"><a href="#うーん／ええと" class="headerlink" title="うーん／ええと"></a>うーん／ええと</h3><ul>
+<li>「うーん」と似た言葉に「ええと」がある。考えたり、言葉に詰まった時などに、ついつい言いてしまう言葉。</li>
+</ul>
+<p>「これからどうしますか。－うーん、食事でもしましょうか。」　　これからどうするかを考えている。<br>「これ私が作ったんです。どうですか、おいしい？－うーん、ちょっと甘いけど、おいしいよ」　　「うん」と「ううん」中間<br>「うーん、ええと、もうすぐ思い出すから、ちょっと待ってください」　　何かを一生懸命思い出そうとしているときに使っている。<br>「きょう、みんなでお酒飲みに行くんですが、田中さんもどうですか。－うーん、ちょっと今日はすみません。」　「ううん」に近い、「ううん」は完全に否定を表す言葉だから、ちょっと強い表現はっきり断定するときに使うもの、「うーん」は相手に気を使って、やわらかく伝えるもの。</p>
+<h3 id="～のではないか／～のではないだろうか／～のではないでしょうか"><a href="#～のではないか／～のではないだろうか／～のではないでしょうか" class="headerlink" title="～のではないか／～のではないだろうか／～のではないでしょうか"></a>～のではないか／～のではないだろうか／～のではないでしょうか</h3><ul>
+<li>「～ではないか」は話しての気持ちを表す表現。正しいかどうか確かではないが、きっとただしいと思われるときに、断定を避け、控えめに自分の気持ちや考えを相手に伝えるもの。</li>
+<li>「～のではないか」は主に書き言葉。「～のではないだろうか」は書き言葉、話し言葉両方に使われ。「～のではないか」より、さらに控えめ</li>
+<li>「彼はこのままだと失敗するだろう」「彼はこのままだと失敗するだろうと思う」１ほぼ同じ２</li>
+<li>「彼はこのままだと失敗するだろうと思う」「彼はこのままだと失敗するのではないか」「彼はこのままだと失敗するのではないだろうか」３－４－５の順番で控えめになっていく</li>
+<li>これらの表現は丁寧な婉曲表現なので、どれも仕事やきちんとしたときなどに使うことが多い、友達や仲がいい人同士ではつかわない。その場合、次のように、気軽な表現に変えよう「～ではないですかー＞じゃありませんか」「～じゃないですかー＞じゃないか」</li>
+</ul>
+<p>「このままだと失敗するのではないでしょうか。」<br>「田中さんは来ないのではないですか」<br>「彼女はきっと、こうなることをわかっていたんじゃないでしょうか」</p>
+<h3 id="と思う／と思える／と思われる"><a href="#と思う／と思える／と思われる" class="headerlink" title="と思う／と思える／と思われる"></a>と思う／と思える／と思われる</h3><ul>
+<li>「思える」の意味は大きく分けて、可能の意味「思うことができる」自発の意味「そう感じられる。自然にそう思われる」ここでは、可能ではなく、自発の意味で使っている。使う場面によっても違うが、「思える」を使うと、少し婉曲的な表現になることがある。「わたしはこう思います」と言い切ってしまうと、少し強い感じがする場合。それを少しやわらかくするために、「思えます」を使うことがある。「思われます」も同じ。</li>
+<li>「思う」は主観的で、自分の考えを述べている。それに比べて、「思える」「思われる」などは、断定をしていない。とくに「思われる」は論文や報告書などでよく使われる言葉。この時「思われる」は「思う」に比べて、ある程度の客観性を持っている。自分の判断ではなく、ほかの客観的なことから、自然とそうになる、という意味。「彼の話は真実だと思う」－＞主観的意見　「彼の話は真実だと思える」－＞状況などから判断して導かれる意見。基本的に客観的な時に使うんだ、実際は自分の意見の時にも非常によく使われる。「思う」は自分の考えを断定しているが、「思われる」などは誰の考えなのか曖昧、なので自分の考えだと、はっきり言わないことで、少し逃げ道を作っている</li>
+<li>自分の意見をやわらかく言いたいとき、客観性を持たせたいとき、断言を避けたいとき</li>
+<li>「思われる」論文や会議、仕事の時に使うことが多い。会話では「思える」のほうがよくつかわれる。</li>
+</ul>
+<p>「私は新しい企画のほうがいいと思う。」<br>「このままでいいと思えない。」<br>「彼女の成績があがったのは、彼の影響だと思われます。」</p>
+<h3 id="～わけではない"><a href="#～わけではない" class="headerlink" title="～わけではない"></a>～わけではない</h3><ul>
+<li>「わけではない」／話し言葉「わけじゃない」：部分否定、「まったく」「すべて」「特に」「必ず」などの副詞と一緒に使われることが多い。</li>
+<li>もう一つ用法：相手の推論や考え方が正しくないとき、それを否定するときに「わけではない」を使う。否定や断定をやわらげた言い方。「反対するわけではない」＝「賛成」ではない。前にくる文によって異なる。「彼が強引だからといって、彼のことが嫌いなわけじゃない」＝理由　「彼を避けているけど、彼のことが嫌いわけじゃない」＝正しくない</li>
+<li>「というわけではない」という言い方もよく使われる、どちらを使っても問題はないので。</li>
+</ul>
+<p>「甘いもの嫌いなんですか。－嫌いなわけではないけどあまり食べません。」<br>「気にしないでください。あなたが悪いわけではありません。」<br>「試験に合格した人がすべて優秀というわけではない。」</p>
+<h3 id="向き／向け"><a href="#向き／向け" class="headerlink" title="向き／向け"></a>向き／向け</h3><ul>
+<li>「向き」＝「～に向いている」　適している／ふさわしい　　結果的</li>
+<li>「向け」＝「～を対象にした」「～のために」</li>
+</ul>
+<p>「これは若者向けの雑誌だ」<br>「この仕事は若者向きだから、ほかの仕事のほうがいいですよ。」<br>「あちらのマンションは外国人向けなので、さまざまなサービスがあります。」<br>「この商品は子供向けに作ったんですが、実際の実験データによると、子供向きではないことがわかりました。」</p>
+]]></content>
+      <categories>
+        <category>日本語</category>
+      </categories>
+      <tags>
+        <tag>日本語</tag>
+        <tag>文法</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>中级日语会话 学习笔记 09-12</title>
+    <url>/2020/09/05/%E4%B8%AD%E7%BA%A7%E6%97%A5%E8%AF%AD%E4%BC%9A%E8%AF%9D-%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B009-12/</url>
+    <content><![CDATA[<h2 id="09-飲み会（合コン）の誘い"><a href="#09-飲み会（合コン）の誘い" class="headerlink" title="09  飲み会（合コン）の誘い"></a>09  飲み会（合コン）の誘い</h2><h3 id="誘い"><a href="#誘い" class="headerlink" title="誘い"></a>誘い</h3><ul>
+<li>誘ってもらって。うれしい時は「ぜひ、参加します」「喜んで、行きます」など「ぜひ」や「喜んで」をつけると、相手も喜ぶ。断るときなどは「せっかくですけど」「残念ですが」などをつけて、相手を気遣う。相手に嫌で断るんだって伝えたいときには必要ないが、日本語では直接「いや」とか「いかない」とかはない。後半を省略したりして、婉曲に断ることが多い。</li>
+</ul>
+<a id="more"></a>
+<h3 id="というと"><a href="#というと" class="headerlink" title="というと"></a>というと</h3><ul>
+<li>「というと」は相手の言ったことの意味がはっきり分からないときに、もうちょっと詳しく説明をしてくださいという意味で使う。「それはどういう意味ですか」この後半部分を省略している表現、でも相手を責めるときにも使うので、ちょっと強く感じる場合もある。だから、「というと」を使うと、その心配がないので、安心。</li>
+<li>年上の人などにはもう少し丁寧な形にしたほうがいい。「といいますと」</li>
+<li>お客様など、もっと丁寧に言いたいときは「とおっしゃいますと」</li>
+<li>もっとくだけた表現にするならば、「っていうと」</li>
+<li>「と申しますと」、これに関してはちょっと微妙な、もともと「申す」は謙譲語として、相手が言ったことに対して、もう一度聞き返しているので、そこに、「申す」を使うのはよくない。相手の言ったことなので、本来、尊敬語を使うべき。「とおっしゃいますと」は正解。でも使う人が多くなる、いまは間違いとは言えないかも。</li>
+</ul>
+<p>「この事件は、このままでは終わらない。－というと、まだ何か起こるんですか。」<br>「これでかれも成長するだろうね。－と言いますと。」<br>「これ無理だと思うよ。－っていうと」</p>
+<h3 id="耳にする（体の一部）"><a href="#耳にする（体の一部）" class="headerlink" title="耳にする（体の一部）"></a>耳にする（体の一部）</h3><ul>
+<li>「耳にする」＝聞く、耳に入ってくる。でも過ごし違う、自然に聞こえてくる。街を歩いていて聞こえてくる音楽だったり、テレビで話している言葉だったり。これはきくというより、自然に耳に入ってくる。</li>
+<li>多くの場合、「耳にする」＝聞く、「目にする」＝見るに置き換えることができるが、ただ、ちょっとニュアンスは違うので、それは覚えておいてください。</li>
+<li>「顔が広い」＝交際範囲が広くて、知人が多い</li>
+<li>「腰が低い」＝他人に対する態度が謙虚</li>
+<li>「歯に衣（きぬ）着（き）せぬ」＝遠慮しないで思ってることを率直にいう</li>
+<li>「目がない」＝度を超えて好きなこと</li>
+<li>「手が早い」＝異性とする関係を持つ／すぐに暴力をふるう／物事をするのが早い</li>
+<li>「手も足も出ない」＝力が足りなくて、する手段がまったくないこと</li>
+<li>「足を洗う」＝好ましくない仲間や仕事から離れて真面目になること</li>
+<li>「尻が軽い」＝女性が浮気っぽいこと</li>
+</ul>
+<p>「さっき、気になる話を耳にした。」<br>「最近スマートフォンをよく目にする。」<br>「つい口が滑って、秘密を言ってしまった。」</p>
+<h3 id="文末の「ので／から／って」"><a href="#文末の「ので／から／って」" class="headerlink" title="文末の「ので／から／って」"></a>文末の「ので／から／って」</h3><ul>
+<li>「から」は「ので」に比べて少しだけきつい感じがする。「から」を使うと強く理由を言ってる感じがするからだ。だから、やわらかく言いたいときには「ので」を使うことが多い。「から」のほうが主観的、「ので」のほうが客観的理由を表す。「から」を言うと言い訳っぽく聞こえてしまうことがある。</li>
+<li>「体調が悪いから、早退します」＝自分の都合、理由を強く主張しているけど。</li>
+<li>「体調が悪いので、早退します」＝ただそれが理由ですと伝えている感じがする。ーすすめ</li>
+<li>日本語は、後半を省略することが多いので、理由表現も、特に断るときなどは相手にきをつかって省略をする。基本的には理由と原因を表すが、それ以外にも例文三のような使い方もある。</li>
+<li>年上の人などが相手の時や、仕事の時には、「ので」を中心に使うといい。「ので」のほうがやわらかくて丁寧な印象がある。</li>
+<li>例文四のように、理由を表す「～て」。文末に持ってくることができる。話し言葉として使うので、少しくだけた感じがする。</li>
+</ul>
+<p>「週末みんなでカラオケに行くんですが、一緒に行きませんか。－ごめんなさい、先約があるので。」<br>「今日お酒飲みに行こうよ。－あ、今日はちょっと、テスト前だから。」<br>「こんなにもらってもいいんですか。－大丈夫。実家からたくさん送ってきたから。」<br>「なんだか眠そうな顔してるね。－今日朝が早くて」</p>
+<h3 id="そういえば、そうですね"><a href="#そういえば、そうですね" class="headerlink" title="そういえば、そうですね"></a>そういえば、そうですね</h3><ul>
+<li>「そういえば、そうですね」は相手の言葉から、そうと気づいたときや何かを思い出したときに使う。この場合は相手の言葉を聞いて、そのことに今まで気づいていなかったけど、そう思う。</li>
+<li>同じような表現は「いわれてみれば、そうですね」がある。相手に何かを言われて、観察をしてみたら、そうでした。どちらも、日常生活でよく使う表現。断定はせず、推量を使った、「いわれてみれば、そうかもしれませんね」などの言い方もよく聞く。</li>
+<li>「あっ、そうだ」と「そうそう」同じ使い方をすることが多い。ただ、「そうそう」に比べて、「あっ、そうだ」のほうが、伝えることを、いま思い出した！という印象が強いし、いま思いついたというときにもよく使う。</li>
+<li>「あっ、そうだ！忘れてた」のように、独り言風に使う人も結構いる。</li>
+</ul>
+<p>「山田さん来ないですね。ーそういえば、そうですね。」<br>「今日、いつもより人が多くないですか。ー言われてみれば、そうですね。」<br>「あっ、そうだ。明日から研修生が来るので、よろしくお願いします。」</p>
+<h3 id="～ですけれど／ですが"><a href="#～ですけれど／ですが" class="headerlink" title="～ですけれど／ですが"></a>～ですけれど／ですが</h3><ul>
+<li>「暇ですけれど」「暇ですが」どちらもいい、友達同士の場合は「暇ですけど」のほうが使われることが多い気がする。</li>
+<li>最近の若い人は「～けれど」はあまり言わず、「～けど」を使う人が多い。友達同士の場合、「だけど」がよくつかわれている。「ですけれども」もよく使われている、特に仕事の時に使われる。丁寧な表現で、やわらかい表現なので、女性に好まれる表現。</li>
+<li>「～だが」は会話のとき，女性は使わないようにしてください。乱暴な言い方に聞こえてしまうから。「ですけれど」「ですが」どちらを使ってもいい。</li>
+</ul>
+<p>「これ私が作ったんですが、よかったら食べてください。」<br>「坂本ですけれど、どちら様でしょうか。」<br>「彼の言うこともわかるが、賛成はできない。」</p>
+<h3 id="敬語ー～させていただく"><a href="#敬語ー～させていただく" class="headerlink" title="敬語ー～させていただく"></a>敬語ー～させていただく</h3><ul>
+<li>過剰敬語。</li>
+<li>「させていただく」＝「させてもらう」の謙譲表現　！＝「する」。自分が行うことを、相手やほかの人の許可を受けて行い、そのことで恩恵を受けるときや感謝の気持ちがあるときに使うものつまり、「させていただく」は単なる「する」の謙譲語ではない。</li>
+<li>「私は桜大学の日本語学科を卒業させていただきました。」ちょっと丁寧すぎる。この文、誰に許可してもらい、誰に感謝している文なのかもしこれが、両親に対する感謝や、また、先生たちへの感謝という意味で使っているのなら問題ない。しかし、もしただの自己紹介で使うのであれば、不自然。その場合「卒業しました」が正しい。</li>
+<li>「させていただく」には相手が許す許さない関係なく、自分はするという意志を強く示すときにも使われる表現。</li>
+</ul>
+<p>「結婚式には、せひ、出席させていただきます。」<br>「忘年会の会場を変更させていただいてもよろしいでしょうか」<br>「今度の会議、私に発表させていただけませんか」</p>
+<h2 id="10-お願いする"><a href="#10-お願いする" class="headerlink" title="10  お願いする"></a>10  お願いする</h2><h3 id="依頼／お願い"><a href="#依頼／お願い" class="headerlink" title="依頼／お願い"></a>依頼／お願い</h3><ul>
+<li>相手に何かを依頼するときの流れは、まず、話の切り出しとして「相談したいんですが」「お願いがあるんですが」「〇〇のことなんですが」、このように相手にお願いがあることを伝える。その方が、相手も反応しやすいので、会話がスムーズに進む。</li>
+<li>お願いする内容を伝えるが、相手が誰なのかによって待遇表現が変わる。相手との関係性によって違う。仲がいい同僚や友達の場合は、とても気軽に、「～してもらえる？／～してくれない？／頼んでもいい／お願いしてもいい？」などがよくつかわれる。</li>
+<li>「申し訳ないんですが／急なんですが／突然なんですが／ご迷惑をおかけしますが」このような言葉を一緒に言うと、相手にちゃんと気を使っているということも伝わる。いきなりお願いをすることはない。友達なら、「悪いんだけど／お願いがあるんだけど」などよく聞く。</li>
+<li>授受表現「くれる」「もらう」「あげる」の中でも、相手に何かをしてもらうようにお願いするときには、「してくれませんか」「してもらえませんか」をよく使う。丁寧にすると「してくださいませんか」「していただけませんか」「していただけないんでしょうか」「していただけませんでしょうか」</li>
+<li>「くれる」より「もらう」のほうがよくつかわれる。「くれる」はもともと「私に～てくれる」のように、「私に」という意識がわりと強いので、それよりも「もらう」を使ったほうがやわらかく感じるから、気軽なお願いの時は「くれる」を使うのはいいけど、ちょっと面倒な相手に迷惑をかけるお願いの時には、友達同士でも「してくれない」はあまり使わないほうがいい。「くれる」は「私に」「私のために」ってイメージがある。</li>
+<li>授受表現は普通形よりも疑問形は、そして否定形にしたほうが、丁寧度が高くなる。</li>
+</ul>
+<p>「すみません、今、ちょっとよろしいでしょうか。ー大丈夫ですよ。－実は、来週の発表会の司会をしていただけないでしょうか。」<br>「申し訳ないんですが、時間を変更してもいい？」<br>「悪いんだけど、少し手伝ってもらえる？」</p>
+<h3 id="改まって／改めて"><a href="#改まって／改めて" class="headerlink" title="改まって／改めて"></a>改まって／改めて</h3><ul>
+<li>「改まって」＝かしこまる。他人行儀の堅苦しい態度になること。相手がいつもと違って、礼儀正しく堅苦しい態度になったり、そのような服装になったり、あとそんな言い方をした時などに使う例えば、さっきまでは冗談を言ってたのに、急に真面目な顔してきちんとしたことを言ったりしたときなどに使う。普段は冗談を言う人でも、真面目な真剣な話をするときはやはり違う。いつもと違う真面目な雰囲気を感じて、あれ、なにかあるのかな、と思うときによく使う。</li>
+<li>「改めて」＝再び新しく正式に何かを行うときに使う。もしくは、思い直して感動などを、新しく感じるときにも使う。</li>
+</ul>
+<p>「そんなに改まって、どうしたの？ー実は、折り入ってご相談があるのですが。」<br>「今日は改まった格好してるけど、何かあるんですか。－はい、これから会社のパーティーなんです。」<br>「確か、前にお会いしましたね。－はい、改めてご挨拶します。山田と申します。」<br>「旅行をしてよかったと改めてそう思う」</p>
+<h3 id="折り入って"><a href="#折り入って" class="headerlink" title="折り入って"></a>折り入って</h3><ul>
+<li>「折り入る」という動詞は深く心を込めてという意味がある。「折り入って～する」は特にこころを込めて、じっくり、誰かにお願いするときや相談をするときに使われる表現。</li>
+<li>仕事でも友達との会話でもいろんなところで使われる。この「折り入って」を使うと相手はとても大切な内容だなとわかるので、相手も静かなところでしっかり話を聞かなければいけないなと考える。つまり、重要な要件、大切な要件などのときにこの表現を使う。</li>
+<li>普通は何かゆっくり話をしたいときや、大切なお願いするときに使うので、それ以外はあまり使わない。これを使うと相手は「どうしたんだろう」と思うから。簡単な話やお願いのときには、「ちょっとお願いがあるんですが」「少し相談があるんだけど」などもうちょっと気軽な言い方をする。お願いをするときも、内容によって、言い方を変えたほうが相手に伝わる。「お願いがあるんですが」、これだけでも十分に伝わるが、前に一つ言葉をつけるだけで、その内容の重要さなども伝わりコミュニケーションがうまくいきやすい。</li>
+</ul>
+<p>「折り入ってご相談したいことがあるんですか」<br>「きみに折り入って頼みたいことがあるんだ」</p>
+<h3 id="終助詞「か」（引き受ける）"><a href="#終助詞「か」（引き受ける）" class="headerlink" title="終助詞「か」（引き受ける）"></a>終助詞「か」（引き受ける）</h3><ul>
+<li>一般的には「か」疑問文になるが、それ以外の用法もある。例文２のように、相手に言われたことを初めて知った場合などに「か」が使われる。これが、もしも知っている内容なら、「そうですね」と。相手に言われて初めて知ったことや、新しい発見があったときにも「か」が使われる。</li>
+<li>また、例文一のように、ちょっと考えたり迷ったりして引き受けるときなどにもよく使われる。この時、積極的にそれをするというよりも、ちょっと考えながらすることを決める、ときに使うことが多い。</li>
+<li>疑問の時は上昇形になるが、これらの使い方はどれも下降気味のイントネーションになる。</li>
+<li>例文一の場合は目上の人に対してはあまり使わないが、それ以外には特に制限はない。あと人に対してというより、独り言風に使うことも多い。</li>
+</ul>
+<p>「もう木村さんにしかお願いできないんです。ーわかりました、では、調べてみましょうか。」<br>「田中さん、会社辞めて国に帰りましたよ。－そうなんですか」</p>
+<h3 id="君／あなた／お前（二人称代名詞）"><a href="#君／あなた／お前（二人称代名詞）" class="headerlink" title="君／あなた／お前（二人称代名詞）"></a>君／あなた／お前（二人称代名詞）</h3><ul>
+<li>日本語では、敬意を表す相手には代名詞で呼ばないのが普通。つまり「あなた、きみ、お前」などは相手によっては失礼になるということ。</li>
+<li>一番普通なのが「あなた」はもともと目上の人や対等な相手への敬語として使っていた。しかし、現在では、対等または、目下の人に使われるようになった。ただ、ちょっとよそよそしい感じがするので、対等の相手にも実際にあまり使われていない=&gt;人による。使わっている人もいる。ただ、それは場面や相手による。対等または目下の人に対して「あなた」を使うのは女性が多いと言われている。一方、男性は「君」を使うことが多いようだ。でも、友達同士で「あなた」を使うことは少ない。「あなた」には、ちょっと「よそよそしい」感じがあるので、親しいひとは名前を呼ぶ。男性同士で「あなた」を使うことはほとんどない。いつ使う？例えば、知らない人に呼びかけるときなどは「あなた」を使うことも多い。夫婦で、奥さんが旦那さんを呼ぶときもよく使われている。もともと日本語は主語を省略するのが多い、「あなた」も必要な時以外は省略するのが本当なんだ。必要ない時に「あなた」を入れると強調されて呼ばれている感じがしまたり、なんだか不快に感じてしまったりするのかも。目下の人にも使う言葉なので、人によっては「あなた」を使うと下に見られていると思ったり。責めるときにもよく使うので、責められていると思ってしまう人もいる。あなたと呼ばれて相手がどう感じるかわからないから、人によって感じ方が違うのでなるべく使わないようにしている。もちろん、知らない人が相手のときは別。</li>
+<li>年上を呼ぶときは、「先生」や「課長」など職業や肩書きで呼ぶ。目上の人に「あなた」を使うと失礼になるので気を付けよう。親しい人なら「～さん」をつけて呼ぶ。つまり、「あなた」を使わずに肩書きや名前で呼ぶのが普通。</li>
+<li>また、「お前」や「君」も同じ。「お前」は主に男性が使うもので、対等または目下の相手に使う。女性が使うと乱暴に聞こえるので、女性は使わないでください。「お前」は喧嘩などの時にも使うので、やや乱暴な言葉。親しい相手に優しく言えば、それが愛情表現となることもある。親しい人に言われると逆に親しみを感じるということ。「君」はよく歌詞や詩に出てくる。多くは、男性が対等または目下に使う。最近では女性が男性に対して使うことも多い。仕事の時に上司が部下に対して「君」を使うことも多い。友達同士で使うのは少ない、名前が一番多い。恋人同士で男性が女性に対して言う場合もあるが、これも好き嫌いがある。「君」と呼ばれるとちょっと気持ち悪いとか、恥ずかしいとか、落ち着かないという人もたくさんいる。</li>
+</ul>
+<p>「お前何やってるんだよ。－あ、ごめん」<br>「これはあなたの落し物ですか。－あ、はい、ありがとうございました。」<br>「君、この書類を調べといて。」</p>
+<h3 id="～ばかりだ／～一方だ"><a href="#～ばかりだ／～一方だ" class="headerlink" title="～ばかりだ／～一方だ"></a>～ばかりだ／～一方だ</h3><ul>
+<li>「ばかり」にもいくつか用法があるが、ここでは、物事がよくない方向にだけ進んでいくときに使う表現。これと同じ表現に「一方」がある。どちらも変化が一つの方向に向かうときに使う。この二つはほぼ同じ使い方をするが、大きく違うところが一つある。</li>
+<li>「ばかり」＝よくない方向に進むときに使う。「一方だ」＝いい方も悪い方も使うことができる。</li>
+</ul>
+<p>「不況の影響で就職率が下がる一方だ。＝ばかり」<br>「努力しても、私たちの関係はひどくなるばかりだ。＝一方」<br>「テレビＣＭのおかけで売り上げは上がる一方です。×ばかり」</p>
+<h2 id="11-同窓会（レストランで）"><a href="#11-同窓会（レストランで）" class="headerlink" title="11  同窓会（レストランで）"></a>11  同窓会（レストランで）</h2><h3 id="レストランで"><a href="#レストランで" class="headerlink" title="レストランで"></a>レストランで</h3><ul>
+<li>レストランでの注文の仕方や流れ：まず、レストランに入ったら、予約をしたかしないか、人数を伝える。最近では、喫煙、禁煙がはっきり分かれているので、たばこを吸うひとは、その店に喫煙席はあるのかないのか、確認してください。</li>
+<li>オススメを聞いても、食材や調理法がわからなくて、結局どんなものかわからないことも多い。そんな時は、ほかに似た食べ物がないかどうかを聞いてみるといい。</li>
+<li>最後にお会計をして帰るが、「会計をお願いします／勘定をお願いします」この二つがよくつかわれる。</li>
+</ul>
+<h3 id="もしかして"><a href="#もしかして" class="headerlink" title="もしかして"></a>もしかして</h3><ul>
+<li>「もしかして」「もしかしたら」「もしかすると」基本的には同じ意味、多くの場合言い換えることができる。どれも、はっきりとした根拠はないが、可能性があるときに使う、推量を表す言葉。この場合、どれも主観的で、大きな差はない。</li>
+<li>ただ、「もしかして」は「もしかすると」の砕けたいいかたなので、友達同士の気軽な会話ではよくつかわれている。「もしかして」は例文四のように「もしも」という意味がある。その場合はほかの二つに言い換えることはできない。</li>
+</ul>
+<p>「もしかして、忘れてきたんですか」<br>「もしかすると、彼は来ないかもしれませんね。」<br>「もしかしたら、見つかるかもしれないから、もう少し探しましょう」<br>「もしかして、クビになったらどうしよう。〇もしも×もしかすると×もしかしたら」</p>
+<h3 id="～ことから"><a href="#～ことから" class="headerlink" title="～ことから"></a>～ことから</h3><ul>
+<li>「～ことから」はそれが原因で、それが理由でという意味で使われる。前半の～が理由で、そのことから判断すると、こうなる、後半が起ころということ。この時、主観的な意味や判断ではなく、一般的なこと、客観的に判断できるということが来る。これは「～ところから」と多くの場合言い換えることが可能。</li>
+<li>ただ、「～ところから」は「～ことから」に比べて、「～」のほかにも理由があると思われる、のような気持ちがプラスされる。</li>
+<li>主に文章で使われるものだから、会話では、「無断欠勤がおおいから、首になった」のようにもっと簡単にいう場合が多い。普通に「から」を使ってしまうと、客観的というよりも自分の意見が入ったりもする。仕事の時や、あと文章、そして何か調べて発表したり、資料を基になにかを導きたいときなど、使うときは正式な場合や硬い時などが多い。普段の会話ではあまり使わない。</li>
+</ul>
+<p>「彼女は頬っぺたが赤いことから、りんごちゃんと呼ばれている。」<br>「無断欠勤が多いことから、彼は仕事をクビになった」<br>「タバコの火がついていたところから、まだ彼は遠くに行っていないと思われる」</p>
+<h3 id="そうだ／ようだ"><a href="#そうだ／ようだ" class="headerlink" title="そうだ／ようだ"></a>そうだ／ようだ</h3><ul>
+<li>様態の「そうだ」は過去には使えない。「独身そうだ」のように名詞には接続しない、このような時には「ようだ」を使う。視覚や感じたこと、これでわかるときは「そうだ」を使う。</li>
+<li>例文三のように、何かの情報から考えて分かったこと、あと例文四のように、五感や体で感じたものを判断として、こんな時には「ようだ」を使う。</li>
+<li>「いまにも雨が降りそうですね」「雨が降るみたいですね」あと大きな違いは、「そうだ」のほうが「ようだ」に比べて、今まさにそうなりつつある、という切迫感がある。一方「ようだ」はそういう可能性があるということなので、「ようだ」のほうがちょっとのんびりした感じ。</li>
+</ul>
+<p>「彼女はとてもおいしそうに食べている。」<br>「寒い、なんだ風邪をひきそうだ」<br>「部屋中探しましたが、見つかりません。ここにはないようですね」<br>「このスープちょっと濃いようです」（味見をして判断）<br>「女のようだ。×そうだ」<br>「×昨日は寒そうだった。〇昨日は雨が降ったようだ」</p>
+<h3 id="それはそうと"><a href="#それはそうと" class="headerlink" title="それはそうと"></a>それはそうと</h3><ul>
+<li>「それはそうと」＝前の話を打ち切って、別の話題に移るときに使う接続語。もうその話はこれで終わりにして、次の話をしましょうという意味似た表現。「それはそうとして」「それはさておき」など、同じように使うものがある。</li>
+<li>使い方は基本的にはおなじ。ただ「それはさておき」は特に、多くの場合話題を雑談などから、本題に移るときよく使う言葉。それほど多きな違いはないので、どれを使ってもいい。会話で一番よくつかうのは、一番言いやすい「それはそうと」。仕事でもつかえる。</li>
+<li>ただ、「それはそうと」は前の話を強引にやめて、ほかの話題をするときに使う。でも、先生が言ってる話を打ち切って、次の話にするわけ、ちょっと失礼。。使う相手、使う場合も気を付けてください。</li>
+</ul>
+<p>「それはそうと、昨日の打合せのことなんですが」<br>「それはそうとして、今日はどうしたんですか」<br>「それはさておき、本題に入りましょう。」</p>
+<h3 id="～でしょう"><a href="#～でしょう" class="headerlink" title="～でしょう"></a>～でしょう</h3><ul>
+<li>「でしょう」＝相手に対して同意を求める言い方。とてもくだけた言い方。「～ですよね」などもある。どれもイントネーションは上昇口調になることが多い。</li>
+<li>男性の場合は「～だろ」「～だろう」などもよく使う。ただ、これ女性が使うと乱暴になるので、女性は使わないようにしてください。</li>
+</ul>
+<p>「今回は旅行できたんでしょう」<br>「その本すごく面白いでしょ、私も大好きなんです。」<br>「お前、俺のこと好きだろう。」</p>
+<h3 id="そうだなあ"><a href="#そうだなあ" class="headerlink" title="そうだなあ"></a>そうだなあ</h3><ul>
+<li>「そうだなあ」＝「うーん」。相手に言われたことや聞かれたことなどに対して、すぐには答えられず、ちょっと考えているときに口に出す言葉。「そうですね」のもっとくだけた言い方で。男性もよく使う、女性も使うが、女性の場合は「そうね」を使う人も多い。</li>
+<li>丁寧なことばを使う相手の時には、丁寧形を使った「そうですね」を使てください。親し間柄では「そうだなあ」「そうね」でOK。最近は「そうね」のように女性らしい言葉は少ない、特に若い人の間。ただ、年が上になると、若い時には使わなかったのが、使うようになる人も多い。</li>
+</ul>
+<p>「何食べに行きますか。－そうだなあ、何がいいかなあ。イタリアンはどう。」<br>「この案、どう思いますか。ーそうだなあ、それでいいんじゃない」<br>「彼を信じてもいいんだろうか。－そうですね、しばらく様子を見ませんか。」</p>
+<h3 id="やあ／ねえ／よし"><a href="#やあ／ねえ／よし" class="headerlink" title="やあ／ねえ／よし"></a>やあ／ねえ／よし</h3><ul>
+<li>「やあ」は誰かに呼びかけるとき、あと呼びかけられたときの答えとして使われる挨拶の一つ。「やあ」は男女関係なく、「よお」は男性が使う。「よ！」は男性じゃなく、女性もたまに使っているけど。どれも親しい人の間で使う言葉。</li>
+<li>「ねえ」は親しみを込めて相手の注意をひきつけるのに使う。「ねえ、いいでしょう」など「ね」をばし、強めたのが「ねえ」男性は「なあ」を使う人がおおい。</li>
+<li>「よし」は例文三のように、自分で何かを決意するとき、例文四のように相手の行動を促すときに使う。男女関係ない。</li>
+</ul>
+<p>「やあ、元気？」<br>「ねえ、早く帰ろうよ」<br>「よし、今日も頑張ろう」<br>「よし、一緒にやろうよ」</p>
+<h2 id="12-スピーチの相談"><a href="#12-スピーチの相談" class="headerlink" title="12  スピーチの相談"></a>12  スピーチの相談</h2><h3 id="スピーチ"><a href="#スピーチ" class="headerlink" title="スピーチ"></a>スピーチ</h3><ul>
+<li>スピーチにはいくつかルールがある。どこで、どんな立場でスピーチをするのかによって内容は変わってくる。結婚式のスピーチの場合、友人代表や同僚として、また上司としてというのが多い。何より一番大切なのは、決まりきった表現よりも、自分の立場にあったスピーチをするということ。けして長くなくていいので、こころのこもったスピーチをしよう。</li>
+<li>これはどんなスピーチに対しても言えること。基本は<ul>
+<li>小さい声で話さず、皆さんに聞こえるように話すこと</li>
+<li>早口にならないように気を付けること（早口になると聞き取りにくくなる）</li>
+<li>結婚式のスピーチの場合、だいたい３～５分程度</li>
+</ul>
+</li>
+<li>結婚式の場合、司会の人から紹介がある。「それでは、ご友人のｘｘさんに一言いただきたいと思います」このような紹介をされたら、マイクのとこにいって、まずはお辞儀をする。</li>
+<li>それからスピーチを始めてください。話すときは下を向くのではなく、みんなの顔や新郎新婦を見ながらゆっくり話をしてください。無理に暗記をしなくてもいい。緊張して忘れてしまうこともあるので、めもは持って行ったほうがいい。それを見ながらでも問題はないので。全部読むのはよくない。</li>
+<li>とにかく、気持ちを込めて、丁寧に、それが何より重要。</li>
+<li>あと大切なのは、皆さんの前でスピーチをするので、服装にも気を使ってください。出席者もきちんとした格好をしなければいけない。ワンピースやスーツ、ドレスなどを着ていく。色は派手過ぎず、新婦より目立つってはいけない。白い服装もしてはいけない。髪型やアクセサリー、そして靴、これらも服装に合わせて選んでください。普通のワンピースやスーツでも、綺麗なアクセサリーやショールなどで、フォーマルな感じをだせるから、問題ない。コサージュもいい。</li>
+</ul>
+<h3 id="祝いの言葉"><a href="#祝いの言葉" class="headerlink" title="祝いの言葉"></a>祝いの言葉</h3><ul>
+<li>結婚式のスピーチの挨拶。<ul>
+<li>最初に初めの挨拶をする。新郎新婦、そしてご家族に祝いの言葉を伝えてから、スピーチを始めるのが基本。</li>
+<li>簡単な短い自己紹介をする</li>
+<li>新郎新婦の人柄やエピソードなどを話す。</li>
+<li>最後に二人へのお祝い言葉でスピーチを結ぶ</li>
+</ul>
+</li>
+<li>忌み言葉<ul>
+<li>普段普通に使っている言葉でも、場面によっては、使ってはいけない言葉がある。</li>
+<li>結婚式などのお祝いの席では、不幸や不吉なこと、別れや再婚を連想する言葉などは使ってはいけない。例えば「終わる」「壊れる」「切れる」「分かれる」「去る」「出る」「消える」など</li>
+<li>「×これでスピーチを終わりにします。〇これでお祝いの言葉といたします。」</li>
+<li>再びや再度、繰り返すなども再婚なイメージするので、よくない</li>
+<li>あまり気にしすぎなくてもいい。なるべく悪いことを連想する言葉を避けて、前向きな言葉を使うようにしてください。昔と違って、いまはそれほど気にする人も多くはないが、新郎新婦にとってはとても大切なひなので、できるだけ気持ちのいいスピーチをしてあげてください。必ず事前に原稿を用意して、チェックしてから、スピーチをしてください。</li>
+</ul>
+</li>
+</ul>
+<p>「裕二さん、真由美さん、そして、ご両家の皆様、本日は誠におめでとうございます。」<br>「ただいまご紹介いただきました山田と申します。」<br>「お二人の末長い幸せを心から祈っています。本日は本当におめでとうございます。」</p>
+<h3 id="～からといって"><a href="#～からといって" class="headerlink" title="～からといって"></a>～からといって</h3><ul>
+<li>「～からといって」、～から考えられることと違って、という意味で使う会話でも割とよく使われている。後半部分には「～わけではない」「～とはかぎらない」「～というわけではない」など部分否定の文が来ることが多い。話相手の判断や相手に対する批判などのときに使うことが多い。</li>
+<li>例文一とニはやや文章てきだが、会話の時にはもっとくだけた表現が使われている。例文三「からって」は「～からといって」の縮約形。</li>
+</ul>
+<p>「田中さん有名大学出身なのに。有名大学を出ているからといって、優秀とは限らないんですね」<br>「吉田さん中国に住んでいたらしいよ、きっと中国語がうまいんだろう。－中国に住んでいたからといって、中国語がうまいわけじゃないよ」<br>「今が不幸だからって、これからもそうとは限らないよ。」</p>
+<h3 id="～こと"><a href="#～こと" class="headerlink" title="～こと"></a>～こと</h3><ul>
+<li>「こと」は名詞化するときの「こと」、文章が多いんだが、会話でもたまに使われている。何かを相手に伝えるときに使う。主に勧告、要求、何かの条件を伝えるときや命令的な伝達など。例えば、例文一、これは命令的に伝えている。例文には相手に対する助言です。感情を入れず、客観的事実だけを伝えている。</li>
+<li>仕事の時に条件を伝えたり、命令を伝えるときなどはこのように、箇条書き風の「こと」にして伝えることもとても多い。注意事項の箇条書きに使われている。普通の会話ではなく、客観的事実を伝える、注意事項であったり、命令だったり、使う場面は限られている。</li>
+</ul>
+<p>「いいですか、この件は、決してほかの人には言わないこと。」<br>「あなたに必要なのは休むことだ。」</p>
+<h3 id="訪問するときのポイント"><a href="#訪問するときのポイント" class="headerlink" title="訪問するときのポイント"></a>訪問するときのポイント</h3><ul>
+<li>時間は早すぎてもダメ。約束の時間の前後五分くらいを目安に行こう。一番いいのは、ほんの数分ぐらい過ぎたくらいがちょうどいい。十分以上遅れるのはよくない、その場合は事前に遅れそうだと伝えれば問題ない。</li>
+<li>靴を脱いだら、靴を並べる。特に女性。</li>
+<li>部屋に通されたら座る前に挨拶をする</li>
+<li>手土産を持っていく、その際相手の好みや家族構成を考えて選ぶ。「つまらないものですが」と言う人も多い。そのようにへりくだっていうよりは、自分の心を込めた一言を伝えたほうがいい。例えば「皆さんで召し上がってください／食べてください」「人気があるお菓子だと聞きましたので、どうぞ」。手土産の基本はなくなるもの残らないものがいい。食べ物、飲み物、あとお花など、高価なものも、相手が気を使ってしまうので、よくない。相手の好みがわからないときは、おいしいお菓子や飲み物、季節の花や果物など、誰にでも好まれるものを選ぶのがいい。</li>
+<li>お茶やお菓子をすすめられたら、遠慮せずいただく</li>
+<li>帰るときには招かれた御礼を一言伝えてから帰ってください</li>
+</ul>
+<h3 id="よく～"><a href="#よく～" class="headerlink" title="よく～"></a>よく～</h3><ul>
+<li>「よく～てくれる」の副詞「よく」にはいろいろな意味がある。「彼はこの店によく来ます」など頻度を表すときに使う。そのほか、「非常に」「十分に」などの意味でもよく使われている。</li>
+<li>ここでは「嬉しい」「ありがたい」という意味を表している。相手の行動によってありがたいと感じるときによく使われるので、「よく～してくれた」の形で使われている。友達相手だと「今日はよく来たね」お客様相手だと「今日はよく来てくださいました」丁寧さを変えれば、仕事だけではなく、誰にでも使うことができる。</li>
+<li>困難なことをしたものだという意味で、その行いをほめるときにも「よく」を使う。例文三、実現が難しい時などに、それをほめたり、感動したときなどに使うもの。例文四は逆説的にこれは相手を批判したり、皮肉を言ったりするときにもつかう。話の流れや前後の言葉から、大体わかる。あと、大きな違いが口調、ほめたり、感動して言っている言葉なのか、皮肉や批判で言っている言葉なのかは、顔や口調で大体わかる。感動したときなどは心がこもっている。</li>
+</ul>
+<p>「こんなに遠くまで、よく来てくれました。」<br>「よく引き受けてくれました、これで私も安心です。」<br>「忙しいなか、よく頑張りましたね」<br>「昨日あんなことがあったのに、よく会社に来れたね」</p>
+<h3 id="～がた／～ら／～たち"><a href="#～がた／～ら／～たち" class="headerlink" title="～がた／～ら／～たち"></a>～がた／～ら／～たち</h3><ul>
+<li>複数形を表す言葉。一般的に「～がた」はほかのものより尊敬の意味が高い。それと反対に謙譲の意味で使われるのが「～ども」（わたくしども）。どもは自分たちを謙って言うときによく使われるので、仕事の時に聞くことが多い。</li>
+<li>「たち」「ら」この二つはっきりとした使い分けの決まりは特にない。地方や年齢、男女差によっても使われている頻度は違う。ただ、一般的には「ら」よりも「たち」のほうが使われている。「たち」はもともと目上の人に使う言葉だった。それが今では対等の相手や目下の人に対しても使うようになった言葉。</li>
+<li>一方「ら」は、ときには謙譲や軽蔑、親愛などを表すものなので、目上の人には使うことはない。「ら」も「たち」のように対等または目下の人、あと身内に対して使う言葉だが、もともと尊敬の意味をもっていた「たち」とは違う、使われる頻度は高くない。「ら」も同じように親しみや仲のよさを表すときに使う人も多い。ただ、例えば「彼ら」「ぼくら」などはよく使われている、「わたしら」「あんたら」など、どちらも使えるのであれば、なるだけ「たち」を使ったほうがいい。</li>
+<li>どうしても複数であることを示したいときだけ、「がた」や「たち」をつけて複数を表す。この「ら」や「たち」などは複数というよりは、そのグループで複数の人間がいるということを表しているもの。「おじさんたち」は「おじさんが数人いる」というよりも「おじさんを代表するおじさんの友達やおばさんだったり、いろんな人、おじさんのグループが数人がいる」という意味。単純な複数形とは言えない。</li>
+</ul>
+<p>「彼らが来てくれたからもう大丈夫だ」<br>「先生方の意見を聞かせていただけませんか」<br>「明日叔母さんたちが遊びに来るらしい」</p>
+<h3 id="まあまあ"><a href="#まあまあ" class="headerlink" title="まあまあ"></a>まあまあ</h3><ul>
+<li>「まあまあ」にもいくつか用法がある。</li>
+<li>「この料理はまあまあだ」＝十分ではないけど、一応満足できる、形容動詞の「まあまあ」</li>
+<li>ここで使われているのは、相手にあることを勧めたり、相手をなだめたり、制止したりするときに使う「まあまあ」。喧嘩や相手は興奮しているとき、怒っているときなど、落ち着かせるために。</li>
+</ul>
+<p>「まあまあ、そんなに怒らないで。」<br>「もう少し急ごうよ。－まあまあ、そんなに慌てないで、時間はあるから」<br>「昨日は本当にすみませんでした。－まあまあ、まずは座ってください。」</p>
+]]></content>
+      <categories>
+        <category>日本語</category>
+      </categories>
+      <tags>
+        <tag>日本語</tag>
+        <tag>文法</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>教师招聘</title>
+    <url>/2021/01/29/%E6%95%99%E5%B8%88%E6%8B%9B%E8%81%98/</url>
+    <content><![CDATA[<h2 id="上海市考"><a href="#上海市考" class="headerlink" title="上海市考"></a>上海市考</h2><h3 id="基本情况"><a href="#基本情况" class="headerlink" title="基本情况"></a>基本情况</h3><ul>
+<li>时间：150分钟（机考75分钟+作文75分钟）</li>
+<li>180题选择题（机考）、1道大作文（笔试）<ul>
+<li>言语理解与表达（15题）/ 公考</li>
+<li>数理能力（15题） / 公考</li>
+<li>判断能力（15题） / 公考</li>
+<li>教育学（15题） / 教资科目一二</li>
+<li>卡特尔心理测试（120题）</li>
+<li>作文题（1000字）</li>
+</ul>
+</li>
+</ul>
+<a id="more"></a>
+<h3 id="言语理解与表达"><a href="#言语理解与表达" class="headerlink" title="言语理解与表达"></a>言语理解与表达</h3><h3 id="数理能力"><a href="#数理能力" class="headerlink" title="数理能力"></a>数理能力</h3><h4 id="数学运算"><a href="#数学运算" class="headerlink" title="数学运算"></a>数学运算</h4><h5 id="整除"><a href="#整除" class="headerlink" title="整除"></a>整除</h5><ol>
+<li>末位数能被2整除的数能被2整除；末位数能被5整除的数能被5整除。</li>
+<li>末两位能被4整除的数能被4整除；末两位能被25整除的数能被25整除。</li>
+<li>末三位能被8整除的数能被8整除。</li>
+<li>各位数字之和能被3整除的数能被3整除；各位数字之和能被9整除的数能被9整除。</li>
+<li>如果a和b都能被c整除，那么a+b、a-b均能被c整除。</li>
+<li>如果a能被b整除，同时能被c整除，且b、c互质，那么a能被b·c整除。</li>
+</ol>
+<h5 id="最大公约数、最小公倍数"><a href="#最大公约数、最小公倍数" class="headerlink" title="最大公约数、最小公倍数"></a>最大公约数、最小公倍数</h5><ol>
+<li>求最大公约数、最小公倍数：分解质因数法、短除法</li>
+</ol>
+<h5 id="同余"><a href="#同余" class="headerlink" title="同余"></a>同余</h5><ol>
+<li>对于同一个除数m，两个数和的余数与余数的和同余，两个数差的余数与余数的差同余，两个数积的余数与余数的积同余。</li>
+<li>余同加余、和（余数+除数）同加和、差（余数-除数）同加差、最小公倍数为周期。<blockquote>
+<p>一个三位数除以9余7，除以5余2，除以4余3，这样的三位数共有几个？<br>答：“除以5余2，除以4余3”，5+2=4+3=7，和同，最小公倍数20，则这样的数为20n+7，即除以20余7；“除以9余7，除以20余7”，余同，最小公倍数180，则这样的数为180n+7；要使这个数是三位数，则n=1，2，3，4，5。</p>
+</blockquote>
+</li>
+</ol>
+<blockquote>
+<p>一个数除以4余1，除以5余2，除以6余3，则这个数可以表示为什么？<br>答：1-4=2-3=3-6=-3，最小公倍数为60，则60n-3.</p>
+</blockquote>
+<h5 id="尾数法"><a href="#尾数法" class="headerlink" title="尾数法"></a>尾数法</h5><ol>
+<li>“0、1、5、6”的n次方的尾数始终是本身。</li>
+<li>2的n次方的尾数以“2、4、8、6”循环变化，循环周期为4.</li>
+<li>3的n此方的尾数以“3、9、7、1”循环变化，循环周期为4.</li>
+<li>4的n此方的尾数以“4、6”循环变化，循环周期为2.</li>
+<li>7的n次方的尾数以“7、9、3、1”循环变化，循环周期为4.</li>
+<li>8的n次方的尾数以“8、4、2、6”循环变化，循环周期为4.</li>
+<li>9的n次方的尾数以“9、1”循环变化，循环周期为2.</li>
+<li>判断n此方的尾数时，用n除以4，余数为a，则n此方的尾数和a次方的尾数相同。</li>
+</ol>
+<h4 id="常见方法"><a href="#常见方法" class="headerlink" title="常见方法"></a>常见方法</h4><h5 id="代入排除法"><a href="#代入排除法" class="headerlink" title="代入排除法"></a>代入排除法</h5><ol>
+<li>问最大从最大项开始代入，为最小从最小项开始代入，满足题意可从居中项开始代入</li>
+<li>先筛选后代入<h5 id="特殊值法"><a href="#特殊值法" class="headerlink" title="特殊值法"></a>特殊值法</h5></li>
+<li></li>
+</ol>
+<h3 id="判断能力"><a href="#判断能力" class="headerlink" title="判断能力"></a>判断能力</h3><h3 id="教育法律法规"><a href="#教育法律法规" class="headerlink" title="教育法律法规"></a>教育法律法规</h3><h3 id="教育知识与能力"><a href="#教育知识与能力" class="headerlink" title="教育知识与能力"></a>教育知识与能力</h3><h3 id="卡特尔心理测试"><a href="#卡特尔心理测试" class="headerlink" title="卡特尔心理测试"></a>卡特尔心理测试</h3><h3 id="教育写作"><a href="#教育写作" class="headerlink" title="教育写作"></a>教育写作</h3><ul>
+<li>1000字</li>
+</ul>
+]]></content>
+      <categories>
+        <category>工作</category>
+      </categories>
+      <tags>
+        <tag>doing</tag>
+        <tag>工作</tag>
+        <tag>Teacher</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>日本旅行攻略</title>
+    <url>/2020/07/31/%E6%97%A5%E6%9C%AC%E6%97%85%E8%A1%8C%E6%94%BB%E7%95%A5/</url>
+    <content><![CDATA[<h1 id="飞机"><a href="#飞机" class="headerlink" title="飞机"></a>飞机</h1><h2 id="航空公司"><a href="#航空公司" class="headerlink" title="航空公司"></a>航空公司</h2><h3 id="春秋"><a href="#春秋" class="headerlink" title="春秋"></a>春秋</h3><ul>
+<li>提早2个月买票+会员好像还是会送一点点托运行李额，晚了买票好像一点也不送了。如果是为了买买买去日本，那么再去添加行李额其实总价格上并不划算。</li>
+<li>去东京并没有廉航的价格优势，也要2k+，加上行李额的价格可能还不如早点买ANA和JAL。</li>
+<li>去札幌/北海道等地还是可以优先考虑的，和去东京价格差不多在2k左右，ANA/JAL都要从东京中转，直达的价格一般比东航那班便宜些（和东航的去程回程时间都相差不大，东航的饭菜也不好吃，2-3h也看不出什么服务的区别）。</li>
+<li>来回4次春秋好像有3次机场摆渡车，不过现在浦东有卫星厅好像廉航是停在卫星厅了。</li>
+<li>机上要做操。记得上飞机前先买好水，下载好要看的电影小说。</li>
+</ul>
+<a id="more"></a>
+<h3 id="东航"><a href="#东航" class="headerlink" title="东航"></a>东航</h3><ul>
+<li>没啥印象，饭菜不好吃。有很多跟团游的上海阿姨，阿姨很热情。</li>
+</ul>
+<h3 id="ANA-全日空"><a href="#ANA-全日空" class="headerlink" title="ANA/全日空"></a>ANA/全日空</h3><ul>
+<li>提早几个月买的话，价格还不错。甚至商务舱其实也不算很贵，不过短途航程商务舱也没啥意思。</li>
+<li>（只体验过商务舱）饭菜好吃，服务热情，座椅舒服，除了不是ARASHI代言没啥缺点。</li>
+<li>ANA LOUNGE的咖喱和拉面很好吃。</li>
+</ul>
+<h3 id="JAL-日航"><a href="#JAL-日航" class="headerlink" title="JAL/日航"></a>JAL/日航</h3><ul>
+<li>提早几个月买的话，价格还不错，2k6+，但后期价格飞涨。</li>
+<li>ARASHI代言日本国内线。国际线国内线上都可以听到ARASHI的歌，然而也没机会了。</li>
+</ul>
+<h2 id="红眼航班"><a href="#红眼航班" class="headerlink" title="红眼航班"></a>红眼航班</h2><ul>
+<li>极限看控/旅游，省钱省时间，就是需要打鸡血，回国后调整也会很漫长。</li>
+<li>ANA和春秋两个红眼飞羽田，价格都在2k左右，淡季ANA甚至会更便宜。</li>
+<li>2017/2018年两次都是凌晨三四点去机场，2019年两次都是红眼，并不知道什么叫做正常旅游。</li>
+</ul>
+<h3 id="ANA"><a href="#ANA" class="headerlink" title="ANA"></a>ANA</h3><ul>
+<li>浦东-羽田 去程 01:45 - 05:30 / 回程 22:00 - 24:35</li>
+<li>下班/放学-&gt;回家洗澡-&gt;九点多出发赶二号线末班车，也基本上来得及，不用请假。</li>
+<li>去程22:30开始值机，值机人不多不用排队，可以勉强赶上日上。</li>
+<li>如果不算很赶或者有较长时间等待转机的话，可以尝试羽田机场的TIAT到达后淋浴室，不过人很多。</li>
+<li>回程可以乘机场大巴守航线，乘到市区再打的回家可以省点钱。</li>
+<li>没有特殊情况的话，一般会比预计时间提早30分钟到，所以一两点到家后直接睡觉，第二天赶去上班也不是不可以。</li>
+</ul>
+<h3 id="春秋-1"><a href="#春秋-1" class="headerlink" title="春秋"></a>春秋</h3><ul>
+<li>浦东-羽田 去程 19:05 - 23:00 / 回程 01:30 - 03:45</li>
+<li>春秋值机人很多，不清楚现在有没有自助值机了，在浦东二号航站楼最右侧值机。要去免税店最好早点到，回程遇上了上海大叔大妈旅行团，排队超级长。</li>
+<li>春秋去程的时间其实很不错，提前理好行李，周五提早2-3小时下班（15:00-16:00）就差不多能赶上。到达后基本能赶上京急，半小时内从羽田回市区，差不多能在零点前赶到宾馆睡个好觉。</li>
+<li>回程硬座会累到怀疑人生，但两个多小时也不是不能忍受，如果你坐着也能睡着的话。而且回来后在星巴克坐个1-2小时就可以赶地铁头班车了，然后开始漫长一天的工作/学习。</li>
+</ul>
+<h2 id="转机"><a href="#转机" class="headerlink" title="转机"></a>转机</h2><h3 id="羽田机场-ANA-国际转国内"><a href="#羽田机场-ANA-国际转国内" class="headerlink" title="羽田机场 ANA 国际转国内"></a>羽田机场 ANA 国际转国内</h3><ul>
+<li>联程的话完全不用急，出飞机后会有专门的空姐引导，跟着引导走就不会来不及，就算来不及也是他们的失误所以不用担心。</li>
+<li>国内航线转机柜台航班托运截止时间为航班出发50分钟前，国内航班安检处的截止时间为航班出发45分钟前。</li>
+<li>转机90分钟差不多够用，跟着引导依次经过入境-&gt;取托运行李（因为国际线国内线在两个航站楼所以要重新办托运，不过现在羽田的国际线航站楼改名叫第三航站楼不知道以后还需不需要重新托运，可以在浦东和地勤说后续有转机航班，让行李贴优先标签）-&gt;在到达大厅最右侧办理国内线托运-&gt;隔壁值机安检-&gt;乘机场大巴去国内线航站楼。</li>
+<li>如果行程是先去其他地方再乘国内线回东京旅游的话，可以在这个时候先买好东京的三日地铁票，因为国内线就不停这个航站楼可能没有卖地铁三日票。</li>
+</ul>
+<h2 id="日本国内线"><a href="#日本国内线" class="headerlink" title="日本国内线"></a>日本国内线</h2><ul>
+<li>日本国内线ANA/JAL都可以连免费WIFI，机上只有饮料提供。</li>
+<li>国内线好像是不需要身份证明的（也就是机票可转让），可以自助值机+托运，不过我不会。</li>
+<li>国内线至少提早20分钟安检，至少提早10分钟到达登机口，提前一个小时左右到机场即可。</li>
+<li>日本国内线ANA/JAL都有游客优惠价，就算不是乘ANA/JAL来日本的也可以优惠，远距离可能会比新干线便宜。</li>
+</ul>
+<h2 id="羽田机场"><a href="#羽田机场" class="headerlink" title="羽田机场"></a>羽田机场</h2><ul>
+<li><a href="https://tokyo-haneda.com/" target="_blank" rel="external">官网</a></li>
+<li>原来的国际线航站楼改成了第三航站楼，好像国际航班现在也许有可能停到第一第二航站楼了（国内线航站楼），第一第二航站楼和第三航站楼是两个地铁站。</li>
+<li>国际线航站楼/第三航站楼<ul>
+<li>到达大厅有TIAT到达后淋浴室，人很多。</li>
+<li>到达大厅观光情报中心（5:30 ~ 25:00）可以买东京三日票，应该是国人在那边打工，可以中文咨询问题。</li>
+<li>回程到的早可以先去羽田4F安检口外逛一圈江户小路。</li>
+<li>到达大厅游客观光中心旁有自动硬币交换机，可以把用剩的日元零钱兑换成人民币到微信。</li>
+</ul>
+</li>
+<li>国内线航站楼（第一第二航站楼）<ul>
+<li>ANA主要在二号航站楼，JAL主要在一号航站楼，机场大巴有区分不要下错站，地铁是一个站。</li>
+<li>可以住first cabin胶囊旅馆，但是住一晚也不便宜。</li>
+</ul>
+</li>
+<li>往返：<a href="https://tokyo-haneda.com/access/train/index.html" target="_blank" rel="external">https://tokyo-haneda.com/access/train/index.html</a><ul>
+<li>羽田到市区很快很便宜，成田在千叶就很远（不过成田很大）。记得有三种去市区方式，机场大巴/monorail/京急，我觉得无脑选京急就可以。</li>
+<li>京急<ul>
+<li>和东京地铁三日券有联票。</li>
+<li>到泉岳寺后京急就改为浅草线，在品川可以换山手线。</li>
+<li>机场快特 &gt; 快特 &gt; 特急 &gt; 机场急行 &gt; 普通，听乘换案内的时间就可以，不一定上第一辆。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="浦东机场"><a href="#浦东机场" class="headerlink" title="浦东机场"></a>浦东机场</h2><ul>
+<li>日上出境免税店 06:30 ~ 23:30，太早太晚很多东西都没货，可以把东西买了回程再取，入境免税行24小时开放。</li>
+<li>往返<ul>
+<li>二号线 <ul>
+<li>运营时间：<a href="http://service.shmetro.com/hcskb/index.htm?line=1" target="_blank" rel="external">http://service.shmetro.com/hcskb/index.htm?line=1</a></li>
+<li>去浦东机场：06:34 ~ 23:01</li>
+<li>从浦东机场出发：06:00 ~ 22:30</li>
+</ul>
+</li>
+<li>机场大巴<ul>
+<li>守航线：23:00至当天最后航班（包括延误）落地45分钟结束，但25:00左右好像也是有的</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="新千岁机场往返"><a href="#新千岁机场往返" class="headerlink" title="新千岁机场往返"></a>新千岁机场往返</h2><ul>
+<li>机场大巴，司机会下来帮你搬行李，如果酒店/民宿离站近可以选：<a href="https://www.chuo-bus.co.jp/highway.cn/airport/index.cgi?ope=chi_pole&amp;trjc=3138&amp;trjs=89" target="_blank" rel="external">https://www.chuo-bus.co.jp/highway.cn/airport/index.cgi?ope=chi_pole&amp;trjc=3138&amp;trjs=89</a></li>
+<li>JR：新千岁机场 - 新札幌站（可以换东西线） - 札幌站</li>
+</ul>
+<h2 id="其他"><a href="#其他" class="headerlink" title="其他"></a>其他</h2><ul>
+<li>大阪关西机场和神户机场很近，中间可以乘船中转。</li>
+</ul>
+<h1 id="住宿"><a href="#住宿" class="headerlink" title="住宿"></a>住宿</h1><ul>
+<li>找住宿之前一定要大致确定好自己想要去的地方，选择一个居中的位置。</li>
+<li>东京<ul>
+<li>离地铁站越近越好，尽量住两条地铁/JR站及以上的地铁站旁。</li>
+<li>不要住私营地铁站旁，如果目的地都在23区内，少有去23区外的话，尽量住在地铁线路旁，不要住在私营地铁/纯JR站旁。</li>
+</ul>
+</li>
+<li>札幌<ul>
+<li>无脑选札幌站/大通站。</li>
+</ul>
+</li>
+</ul>
+<h2 id="酒店"><a href="#酒店" class="headerlink" title="酒店"></a>酒店</h2><ul>
+<li>酒店一般会比民宿更靠近地铁站（可能是错觉），便宜的酒店并不比民宿贵，但人多的话，民宿可能还是相对便宜（因为可以睡榻榻米）</li>
+<li>酒店可以在第一天入住前和最后一天搬出后提供寄存行李的服务，民宿一般没有。coinlocker再方便，也还是要钱。</li>
+<li>酒店一般不需要垃圾分类。</li>
+</ul>
+<h2 id="民宿"><a href="#民宿" class="headerlink" title="民宿"></a>民宿</h2><ul>
+<li>东京的民宿并不一定比三星级的酒店便宜，尤其是还要加清洁费。住民宿前要看清房东发的入住指南，最好了解下各个地方的垃圾分类规则，住的时间长的话可能还要帮房东定点倒垃圾。</li>
+<li>札幌的民宿相对于酒店还是便宜不少的。</li>
+<li>民宿可以体验和房东交流的感觉，展现自己蹩脚日语的机会。</li>
+<li>民宿一般没有办法寄存行李。入住时间一般在15点，退房时间一般在10点-11点，所以如果第一天航班较早，或者最后一天航班比较晚的话，可能需要拎着行李跑或者coinlocker寄存（大箱子600/700日元）。</li>
+<li>民宿隔音很差，太晚入住注意安静。</li>
+</ul>
+<h1 id="行程"><a href="#行程" class="headerlink" title="行程"></a>行程</h1><ul>
+<li>大致算好各个想去的地方之间的最优路线即可，反正最后都会因为各种原因打乱计划，比如迷路和下雨。</li>
+<li>个别场所的门票很热门，比如吉卜力的门票可能一个月前就切了。</li>
+<li>安排行程注意商店营业时间，一般很早很晚都不开门。</li>
+<li>早上起床后可以打开电视看富士电视台。</li>
+<li>晚上回旅馆前可以去一次便利店买夜宵和第二天早饭吃，早饭的时候开门的店很少。</li>
+<li>拉面和居酒屋一般开到很晚，也可以作为夜宵，注意餐厅Last Order/L.O.时间。</li>
+<li>可以去飲み放題的居酒屋点梅酒喝。</li>
+<li>walkerplus：<a href="https://www.walkerplus.com/" target="_blank" rel="external">https://www.walkerplus.com/</a><ul>
+<li>花火大会：<a href="https://hanabi.walkerplus.com/" target="_blank" rel="external">https://hanabi.walkerplus.com/</a></li>
+<li>红叶：<a href="https://koyo.walkerplus.com/date1100/ar0313/" target="_blank" rel="external">https://koyo.walkerplus.com/date1100/ar0313/</a></li>
+</ul>
+</li>
+</ul>
+<h2 id="北海道"><a href="#北海道" class="headerlink" title="北海道"></a>北海道</h2><h3 id="札幌"><a href="#札幌" class="headerlink" title="札幌"></a>札幌</h3><ul>
+<li>地铁：南北线、东丰线、东西线</li>
+<li>札幌市中心：札幌站 - 大通 - 狸小路 - 丰水薄野，包括大部分景点，步行可达。</li>
+<li>除市中心额外可去：二条市场、北海道神宫、北海道大学、白色恋人工厂</li>
+</ul>
+<h3 id="小樽"><a href="#小樽" class="headerlink" title="小樽"></a>小樽</h3><ul>
+<li>有小樽站，南小樽站两个站点，一个去一个回就可以（但这样不能在地铁站coinlocker存东西）</li>
+<li>小樽运河、大正硝子馆、音乐盒堂、LETAO、北果楼、六花亭。</li>
+</ul>
+<h2 id="东京23区"><a href="#东京23区" class="headerlink" title="东京23区"></a>东京23区</h2><h3 id="银座、有乐町、新桥、汐留、筑地市场等"><a href="#银座、有乐町、新桥、汐留、筑地市场等" class="headerlink" title="银座、有乐町、新桥、汐留、筑地市场等"></a>银座、有乐町、新桥、汐留、筑地市场等</h3><ul>
+<li>一块地方步行可达，可以安排在一起逛。</li>
+<li>筑底市场的玉子烧100日元/个。</li>
+<li>汐留有日本电视台，可以去逛纪念商店，比如有柯南周边。</li>
+<li>新桥可以换乘海鸥线去台场，海鸥线从新桥去台场坐第一排观光。</li>
+<li>新桥JR是数码宝贝1的巡礼地。</li>
+</ul>
+<h3 id="新宿"><a href="#新宿" class="headerlink" title="新宿"></a>新宿</h3><ul>
+<li>除非视线范围内，否则不要尝试在地下找正确的出口再出去，回到地面再找路。</li>
+<li>迷路过，能不过去就不过去。</li>
+</ul>
+<h3 id="原宿、涩谷"><a href="#原宿、涩谷" class="headerlink" title="原宿、涩谷"></a>原宿、涩谷</h3><ul>
+<li>推荐作为买买买的地方，应有尽有，并且不容易迷路。</li>
+<li>景点：忠犬八公、涩谷SKY（ARASHI同款）、代代木公园、竹下通、表参道、原宿站、国立、神宫外苑等</li>
+<li>涩谷：LOFT（东京最大，~21:00）、Mandarake（~20:00）、Cando（百元店，~22:00）、Tower Records（~23:00）、TSUTAYA（~26:00）</li>
+<li>原宿：JSHOP、WEGO、DAISO、生写店、可丽饼</li>
+</ul>
+<h3 id="六本木"><a href="#六本木" class="headerlink" title="六本木"></a>六本木</h3><ul>
+<li>六本木新城 <ul>
+<li>3楼只能买到52楼室内观景台的门票，54楼露天观景台的门票需要在52楼买，看完还能回到室内观景台</li>
+<li>54楼观景台最后入场时间19:30，到20:00截止，天气不好不开放。</li>
+<li>可以用学生证</li>
+</ul>
+</li>
+<li>朝日电视台<ul>
+<li>一楼开放参观，营业到20:30</li>
+</ul>
+</li>
+<li>东京中城midtown</li>
+</ul>
+<h3 id="东大、东蛋、天满宫"><a href="#东大、东蛋、天满宫" class="headerlink" title="东大、东蛋、天满宫"></a>东大、东蛋、天满宫</h3><h3 id="浅草"><a href="#浅草" class="headerlink" title="浅草"></a>浅草</h3><ul>
+<li>浅草寺：准备五元硬币（ごえん）</li>
+<li>浅草站附近有水上巴士エメラルダス，直达台场，四五十分钟左右。</li>
+</ul>
+<h3 id="台场"><a href="#台场" class="headerlink" title="台场"></a>台场</h3><ul>
+<li>TeamLab Borderless：密恐慎</li>
+<li>富士电视台：观景台到18:00，VS岚大海报</li>
+<li>AQUA有一个Jump shop、卖JUMP周边</li>
+<li>数码宝贝巡礼地</li>
+<li>台场穿梭巴士：<a href="http://www.hinomaru.co.jp/metrolink/odaiba/odaiba_map.html#timetable1" target="_blank" rel="external">http://www.hinomaru.co.jp/metrolink/odaiba/odaiba_map.html#timetable1</a></li>
+<li>水上巴士（浅草）、百合海鸥线（新桥、汐留）</li>
+</ul>
+<h1 id="其他-1"><a href="#其他-1" class="headerlink" title="其他"></a>其他</h1><h2 id="寄放行李：coinlocker-ecbo"><a href="#寄放行李：coinlocker-ecbo" class="headerlink" title="寄放行李：coinlocker / ecbo"></a>寄放行李：coinlocker / ecbo</h2><ul>
+<li>coinlocker<ul>
+<li>地铁站/JR站的存放用柜子。<ul>
+<li>可参考网站：<a href="https://www.coinlocker-navi.com/" target="_blank" rel="external">https://www.coinlocker-navi.com/</a></li>
+<li>JR涩谷站柜子紧缺的话，往地铁站附近找会有许多空柜子。</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>ecbo<ul>
+<li><a href="https://cloak.ecbo.io/ja/maps" target="_blank" rel="external"><strong>https://cloak.ecbo.io/ja/maps</strong></a></li>
+<li>店家负责保管行李，没用过。</li>
+<li>一般大型商场应该有免费寄存服务。</li>
+</ul>
+</li>
+</ul>
+<h2 id="东京地铁"><a href="#东京地铁" class="headerlink" title="东京地铁"></a>东京地铁</h2><ul>
+<li>东京地铁：<a href="https://www.tokyometro.jp/cn/" target="_blank" rel="external">https://www.tokyometro.jp/cn/</a></li>
+<li>算好行程再买三日票，羽田买票在国际线2F到达大厅观光情报中心（5:30 ~ 25:00）。</li>
+<li>一切听乘换案内+GoogleMap的，看清楚是急行还是普通车，看清车的终点站和下一站，尤其是浅草线。</li>
+<li>如果只在23区内活动，可以选择买东京地铁三日票，可能不会省多少钱，但它会给你不去暴走的勇气。</li>
+<li>23区内最好无脑利用东京/都营地铁+山手线，其他JR和私营都很混杂容易迷路。</li>
+</ul>
+<h2 id="入境卡和申报单"><a href="#入境卡和申报单" class="headerlink" title="入境卡和申报单"></a>入境卡和申报单</h2><ul>
+<li>入境卡与申报单民宿地址先注明Airbnb</li>
+<li>注意出生日期格式是按日/月/年的顺序填写</li>
+</ul>
+<h2 id="移动WIFI和电话卡"><a href="#移动WIFI和电话卡" class="headerlink" title="移动WIFI和电话卡"></a>移动WIFI和电话卡</h2><ul>
+<li>移动WIFI<ul>
+<li>环球漫游移动WIFI，芝麻分免押金，价格约10元/天。</li>
+<li>没有尝试过玩游戏/看视频，基本上网速度信号还不错。</li>
+<li>早上充满电出门，下午晚上基本上还要靠充电宝充一次电。</li>
+</ul>
+</li>
+<li>电话卡<ul>
+<li>没用过，下次可以尝试。</li>
+</ul>
+</li>
+</ul>
+<h2 id="国际漫游"><a href="#国际漫游" class="headerlink" title="国际漫游"></a>国际漫游</h2><ul>
+<li>收费：手机上网1元/MB，短信免费收，发0.69元/条，通话接1.99元/分，拨日本1.99元/分，拨国内2.99元/分。</li>
+<li>海外求助：+8610 12308 / +8610 59913991</li>
+<li>短信直接发，拨日本直接拨，拨国内+86 / +8621（长按0输入加号）</li>
+</ul>
+<h2 id="保险"><a href="#保险" class="headerlink" title="保险"></a>保险</h2><h2 id="旅行清单"><a href="#旅行清单" class="headerlink" title="旅行清单"></a>旅行清单</h2><ul>
+<li style="list-style: none"><input type="checkbox"> 证件类<ul>
+<li style="list-style: none"><input type="checkbox"> 护照、身份证、及其复印件</li>
+<li style="list-style: none"><input type="checkbox"> 学生证、会员证</li>
+<li style="list-style: none"><input type="checkbox"> 交通卡</li>
+<li style="list-style: none"><input type="checkbox"> 日元、银行卡（大商场支付宝/微信基本支持，银联基本也都支持，缺现金也可以直接在便利店取，手续费还可）</li>
+</ul>
+</li>
+<li style="list-style: none"><input type="checkbox"> 电子产品<ul>
+<li style="list-style: none"><input type="checkbox"> 手机、手机充电线</li>
+<li style="list-style: none"><input type="checkbox"> 充电宝、充电宝充电线</li>
+<li style="list-style: none"><input type="checkbox"> 耳机</li>
+<li style="list-style: none"><input type="checkbox"> 移动WIFI/电话卡</li>
+</ul>
+</li>
+<li style="list-style: none"><input type="checkbox"> 日用品<ul>
+<li style="list-style: none"><input type="checkbox"> 伞</li>
+<li style="list-style: none"><input type="checkbox"> 纸巾等</li>
+<li style="list-style: none"><input type="checkbox"> 收纳袋</li>
+<li style="list-style: none"><input type="checkbox"> 笔、本子</li>
+</ul>
+</li>
+<li style="list-style: none"><input type="checkbox"> 衣物</li>
+<li style="list-style: none"><input type="checkbox"> 洗漱用品</li>
+<li style="list-style: none"><input type="checkbox"> 其他<ul>
+<li style="list-style: none"><input type="checkbox"> 背包、行李箱</li>
+<li style="list-style: none"><input type="checkbox"> 手灯、望远镜、控包、扇子（哎……）</li>
+</ul>
+</li>
+</ul>
+]]></content>
+      <categories>
+        <category>旅は続く</category>
+      </categories>
+      <tags>
+        <tag>doing</tag>
+        <tag>旅は続く</tag>
+        <tag>日本</tag>
+      </tags>
+  </entry>
+</search>
